@@ -33,14 +33,15 @@ const resolveShippingCharge = (transaction: TransactionWithShipping): number => 
     return Math.max(0, transaction.shippingCharge)
   }
 
-  const totalAmountInRupees = Math.round((transaction.amount ?? 0) / 100)
+  // transaction.amount is INR minor units (paise), same as shipping helpers.
+  const totalAmountMinor = Math.max(0, Math.round(transaction.amount ?? 0))
 
-  if (totalAmountInRupees >= FREE_SHIPPING_THRESHOLD) {
+  if (totalAmountMinor >= FREE_SHIPPING_THRESHOLD) {
     return 0
   }
 
-  if (totalAmountInRupees >= SHIPPING_CHARGE_AMOUNT) {
-    const productSubtotal = totalAmountInRupees - SHIPPING_CHARGE_AMOUNT
+  if (totalAmountMinor >= SHIPPING_CHARGE_AMOUNT) {
+    const productSubtotal = totalAmountMinor - SHIPPING_CHARGE_AMOUNT
     return getShippingCharge(productSubtotal)
   }
 

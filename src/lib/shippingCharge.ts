@@ -1,16 +1,18 @@
-/** Shipping charge business rules — single source of truth. */
+import { majorToMinor } from '@/lib/inrCurrency'
 
-/** Product subtotal threshold above which shipping is free (inclusive). */
-export const FREE_SHIPPING_THRESHOLD = 1499
+/** Shipping charge business rules — amounts in INR minor units (paise). */
 
-/** Flat shipping fee charged when the product subtotal is below the threshold. */
-export const SHIPPING_CHARGE_AMOUNT = 80
+/** Product subtotal threshold above which shipping is free (inclusive), in paise. */
+export const FREE_SHIPPING_THRESHOLD = majorToMinor(1499)
+
+/** Flat shipping fee when below threshold, in paise. */
+export const SHIPPING_CHARGE_AMOUNT = majorToMinor(80)
 
 /**
- * Returns the shipping charge (in ₹) for a given product subtotal.
+ * Returns the shipping charge (paise) for a given product subtotal (paise).
  * ₹80  → when subtotal < ₹1,499
  * ₹0   → when subtotal ≥ ₹1,499 (free shipping)
  */
-export function getShippingCharge(productSubtotal: number): number {
-  return productSubtotal < FREE_SHIPPING_THRESHOLD ? SHIPPING_CHARGE_AMOUNT : 0
+export function getShippingCharge(productSubtotalMinor: number): number {
+  return productSubtotalMinor < FREE_SHIPPING_THRESHOLD ? SHIPPING_CHARGE_AMOUNT : 0
 }
