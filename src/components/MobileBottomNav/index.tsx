@@ -1,6 +1,5 @@
 'use client'
 
-import { useCartDrawer } from '@/components/Cart'
 import { cn } from '@/utilities/cn'
 import { useCart } from '@payloadcms/plugin-ecommerce/client/react'
 import { Home, RefreshCw, ShoppingBag, ShoppingCart } from 'lucide-react'
@@ -23,6 +22,12 @@ const tabs = [
     icon: RefreshCw,
     match: (path: string) => path === '/reorder' || path.startsWith('/reorder/'),
   },
+  {
+    href: '/cart',
+    label: 'Cart',
+    icon: ShoppingCart,
+    match: (path: string) => path === '/cart' || path.startsWith('/cart/'),
+  },
 ] as const
 
 function shouldHideBottomNav(pathname: string | null): boolean {
@@ -34,7 +39,6 @@ function shouldHideBottomNav(pathname: string | null): boolean {
 
 export function MobileBottomNav() {
   const pathname = usePathname()
-  const { openCart } = useCartDrawer()
   const { cart } = useCart()
 
   const totalQuantity = useMemo(() => {
@@ -52,6 +56,7 @@ export function MobileBottomNav() {
       <ul className="grid h-[var(--site-bottom-nav-height)] grid-cols-4">
         {tabs.map(({ href, label, icon: Icon, match }) => {
           const active = match(pathname)
+          const isCart = href === '/cart'
           return (
             <li key={href} className="min-w-0">
               <Link
@@ -61,29 +66,19 @@ export function MobileBottomNav() {
                   active ? 'text-primary' : 'text-muted-foreground',
                 )}
               >
-                <Icon className="size-5" strokeWidth={active ? 2.25 : 1.75} />
+                <span className="relative">
+                  <Icon className="size-5" strokeWidth={active ? 2.25 : 1.75} />
+                  {isCart && totalQuantity > 0 ? (
+                    <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold leading-none text-primary-foreground">
+                      {totalQuantity > 99 ? '99+' : totalQuantity}
+                    </span>
+                  ) : null}
+                </span>
                 <span>{label}</span>
               </Link>
             </li>
           )
         })}
-        <li className="min-w-0">
-          <button
-            type="button"
-            onClick={() => openCart()}
-            className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-muted-foreground"
-          >
-            <span className="relative">
-              <ShoppingCart className="size-5" strokeWidth={1.75} />
-              {totalQuantity > 0 ? (
-                <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold leading-none text-primary-foreground">
-                  {totalQuantity > 99 ? '99+' : totalQuantity}
-                </span>
-              ) : null}
-            </span>
-            <span>Cart</span>
-          </button>
-        </li>
       </ul>
     </nav>
   )

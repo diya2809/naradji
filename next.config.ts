@@ -23,6 +23,9 @@ const nextConfig: NextConfig = {
       {
         pathname: '/logo.png',
       },
+      {
+        pathname: '/naradji/**',
+      },
     ],
     qualities: [90, 100],
     remotePatterns: [

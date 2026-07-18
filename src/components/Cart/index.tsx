@@ -1,11 +1,23 @@
-import { CartModal } from './CartModal'
+'use client'
+
 import { Cart as CartType } from '@/payload-types'
-import type { CategoryListItem } from '@/types/storefront'
+import { useCart } from '@payloadcms/plugin-ecommerce/client/react'
+import { useMemo } from 'react'
+
+import { OpenCartButton } from './OpenCart'
 
 export type CartItem = NonNullable<CartType['items']>[number]
 
 export { CartProvider, useCartDrawer } from './cart-context'
 
-export function Cart({ categories = [] }: { categories?: CategoryListItem[] }) {
-  return <CartModal categories={categories} />
+/** Header cart control — links to the cart page. */
+export function Cart({ className }: { className?: string }) {
+  const { cart } = useCart()
+
+  const totalQuantity = useMemo(() => {
+    if (!cart?.items?.length) return undefined
+    return cart.items.reduce((quantity, item) => (item.quantity || 0) + quantity, 0)
+  }, [cart])
+
+  return <OpenCartButton className={className} quantity={totalQuantity} />
 }

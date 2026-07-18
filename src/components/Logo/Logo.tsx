@@ -1,21 +1,30 @@
 import { cn } from '@/utilities/cn'
 import { siteName } from '@/lib/site'
+import Image from 'next/image'
 import React from 'react'
 
 type Props = {
   className?: string
+  /** Compact navbar mark vs larger wordmark usage. */
+  size?: 'icon' | 'md'
 }
 
-/** Text wordmark — drop a real asset at `public/logo.png` and switch to next/image when ready. */
-export const Logo = ({ className }: Props) => {
+/** Naradji mark — flat icon from `public/naradji/narad-logo.png`. */
+export const Logo = ({ className, size = 'icon' }: Props) => {
+  const dim = size === 'icon' ? 36 : 48
+
   return (
-    <span
+    <Image
+      src="/naradji/narad-logo.png"
+      alt={siteName}
+      width={dim}
+      height={dim}
+      priority
       className={cn(
-        'inline-flex items-center font-heading text-xl font-semibold tracking-tight text-foreground md:text-2xl',
+        'object-contain object-center',
+        size === 'icon' ? 'size-9' : 'size-12',
         className,
       )}
-    >
-      {siteName}
-    </span>
+    />
   )
 }

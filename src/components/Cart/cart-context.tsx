@@ -1,20 +1,21 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import React, { createContext, useCallback, useContext } from 'react'
 
 type CartDrawerContext = {
-  open: boolean
   openCart: () => void
-  setOpen: (open: boolean) => void
 }
 
 const Context = createContext<CartDrawerContext | null>(null)
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const openCart = useCallback(() => setOpen(true), [])
+  const router = useRouter()
+  const openCart = useCallback(() => {
+    router.push('/cart')
+  }, [router])
 
-  return <Context.Provider value={{ open, openCart, setOpen }}>{children}</Context.Provider>
+  return <Context.Provider value={{ openCart }}>{children}</Context.Provider>
 }
 
 export function useCartDrawer(): CartDrawerContext {
