@@ -82,4 +82,21 @@ describe('alias matching', () => {
     expect(hits[0].id).toBe('maggi-noodles')
     expect(hits[0].qty).toBe(5)
   })
+
+  it.each([
+    '2 milk, 3 atta, 4 chai, 5 oreo, 6 butter',
+    'milk 2, atta 3, chai 4, oreo 5, butter 6',
+    '2 packets milk, 3 packets atta, 4 packets chai, 5 packets oreo, 6 packets butter',
+    'be doodh, tran atta, chaar chai, paanch oreo, chha butter',
+    '૨ doodh, ૩ atta, ૪ chai, ૫ oreo, ૬ butter',
+  ])('preserves five different item quantities: %s', (transcript) => {
+    const hits = matchAliases(transcript, FALLBACK_CATALOG)
+    expect(hits.map(({ id, qty }) => ({ id, qty }))).toEqual([
+      { id: 'amul-taaza-toned-milk-500ml', qty: 2 },
+      { id: 'aashirvaad-atta-1kg', qty: 3 },
+      { id: 'tata-tea-gold-250g', qty: 4 },
+      { id: 'oreo-original-cookies-120g', qty: 5 },
+      { id: 'amul-butter-100g', qty: 6 },
+    ])
+  })
 })
