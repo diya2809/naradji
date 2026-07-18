@@ -15,7 +15,7 @@ export const AccountNav: React.FC<Props> = ({ className, layout = 'sidebar' }) =
   const pathname = usePathname()
   const accountActive = pathname === '/account'
   const addressesActive = pathname === '/account/addresses'
-  const ordersActive = pathname === '/orders' || pathname.includes('/orders')
+  const ordersActive = pathname === '/orders' || pathname.startsWith('/orders/')
   const logoutActive = pathname === '/logout'
 
   const links = [

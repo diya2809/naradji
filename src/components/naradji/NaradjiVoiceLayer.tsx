@@ -88,6 +88,7 @@ export function NaradjiVoiceLayer() {
   const setUISpec = useNaradjiStore((s) => s.setUISpec)
   const cartItems = useNaradjiStore((s) => s.cartItems)
   const setCartItems = useNaradjiStore((s) => s.setCartItems)
+  const micState = useNaradjiStore((s) => s.micState)
   const setMicState = useNaradjiStore((s) => s.setMicState)
   const setTranscript = useNaradjiStore((s) => s.setTranscript)
   const sessionOpen = useNaradjiStore((s) => s.sessionOpen)
@@ -366,11 +367,17 @@ export function NaradjiVoiceLayer() {
   const cartView: UISpec = { ...uispec, items: cartItems }
   const lines = resolveCartLines(cartView, catalog)
   const total = cartTotal(lines)
-  const showSheet = sessionOpen
   const showCompare = uispec.layout === 'compare'
   const showConfirm = uispec.layout === 'confirm' && cartItems.length > 0
   const shipping = uispec.prefill?.shipping
   const addressOk = hasUsableShipping(shipping)
+  // No cart/close sheet while listening — sticker + speech text only.
+  // Empty greeting also stays sheet-free (text bubble on MicPill).
+  const showSheet =
+    sessionOpen &&
+    micState !== 'listening' &&
+    micState !== 'greeting' &&
+    (lines.length > 0 || showCompare || showConfirm || Boolean(lastOrderId))
 
   return (
     <>

@@ -18,10 +18,10 @@ const tabs = [
       path === '/shop' || path.startsWith('/shop/') || path.startsWith('/products/'),
   },
   {
-    href: '/orders',
+    href: '/reorder',
     label: 'Reorder',
     icon: RefreshCw,
-    match: (path: string) => path === '/orders' || path.startsWith('/orders/'),
+    match: (path: string) => path === '/reorder' || path.startsWith('/reorder/'),
   },
 ] as const
 

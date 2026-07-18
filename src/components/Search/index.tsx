@@ -62,9 +62,9 @@ export const Search: React.FC<Props> = ({ className }) => {
       <Button
         asChild
         aria-label="Account"
-        className="size-11 shrink-0 md:size-9"
+        className="size-10 shrink-0 md:size-9"
         size="icon"
-        variant="outline"
+        variant="ghost"
       >
         <Link href={accountHref}>
           <CircleUserRoundIcon className="h-5 w-5" />

@@ -22,7 +22,7 @@ export function MicPill({
   onTranscript,
 }: {
   demo: boolean
-  /** First tap: open sheet + greeting. */
+  /** First tap: open session + greeting (no cart sheet). */
   onOpenSession: () => void | Promise<void>
   onTranscript: (text: string) => void | Promise<void>
 }) {
@@ -31,6 +31,7 @@ export function MicPill({
   const setMicState = useNaradjiStore((s) => s.setMicState)
   const setTranscript = useNaradjiStore((s) => s.setTranscript)
   const transcript = useNaradjiStore((s) => s.transcript)
+  const naradjiLine = useNaradjiStore((s) => s.uispec.naradji_line)
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -97,6 +98,13 @@ export function MicPill({
     mediaRef.current = null
   }
 
+  function clearHoldTimer() {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current)
+      holdTimer.current = null
+    }
+  }
+
   function onPointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
     e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -107,7 +115,6 @@ export function MicPill({
       return
     }
 
-    // Hold to speak once session is open
     holdTimer.current = setTimeout(() => {
       holdTimer.current = null
       void captureAndTranscribe()
@@ -120,9 +127,7 @@ export function MicPill({
       e.currentTarget.releasePointerCapture(e.pointerId)
     }
     if (holdTimer.current) {
-      clearTimeout(holdTimer.current)
-      holdTimer.current = null
-      // Short tap while open: start a quick listen (demo / shy mic)
+      clearHoldTimer()
       if (sessionOpen && micState === 'idle' && (demo || !supported)) {
         void captureAndTranscribe()
       }
@@ -131,64 +136,87 @@ export function MicPill({
     if (recording.current || micState === 'listening') stopRecording()
   }
 
+  const bubbleText = listening
+    ? transcript || 'Listening… Boliye apni list.'
+    : sessionOpen && (micState === 'greeting' || micState === 'speaking' || micState === 'transcribing')
+      ? transcript || naradjiLine || LABEL[micState]
+      : null
+
   const hint = !sessionOpen
-    ? 'Tap mic — Naradji opens'
+    ? 'Tap — Naradji sunega'
     : micState === 'idle'
-      ? 'Hold to speak your list · “haan pakka” to confirm'
+      ? 'Hold to speak · “haan pakka” to confirm'
       : LABEL[micState]
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--site-bottom-nav-offset)+0.75rem)] z-50 flex flex-col items-center gap-2 px-4 md:bottom-6">
-      {transcript && sessionOpen ? (
-        <div className="pointer-events-none max-w-xl rounded-full bg-stone-900/85 px-4 py-2 text-center text-sm text-stone-50 shadow-lg backdrop-blur">
-          {transcript}
-        </div>
-      ) : null}
+    <div
+      className={[
+        'pointer-events-none fixed z-50 flex px-3 md:px-4',
+        listening
+          ? 'bottom-[calc(var(--site-bottom-nav-offset)+0.75rem)] left-0 items-end gap-2 md:bottom-6 md:left-4'
+          : 'inset-x-0 bottom-[calc(var(--site-bottom-nav-offset)+0.75rem)] flex-col items-center gap-2 md:bottom-6',
+      ].join(' ')}
+    >
+      {/* Persistent control — must not remount when listening starts (pointer capture). */}
       <button
         type="button"
         aria-label={listening ? 'Release to stop listening' : LABEL[micState]}
-        className="pointer-events-auto flex h-auto min-w-0 items-center justify-center bg-transparent p-0 shadow-none"
+        className={[
+          'pointer-events-auto flex h-auto min-w-0 items-center justify-center bg-transparent p-0 shadow-none',
+          listening ? 'order-1 shrink-0' : 'order-2',
+        ].join(' ')}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerCancel={() => {
-          if (holdTimer.current) {
-            clearTimeout(holdTimer.current)
-            holdTimer.current = null
-          }
+          clearHoldTimer()
           if (micState === 'listening') stopRecording()
         }}
         onPointerLeave={() => {
-          if (holdTimer.current) {
-            clearTimeout(holdTimer.current)
-            holdTimer.current = null
-          }
-          if (micState === 'listening') stopRecording()
+          if (!listening) clearHoldTimer()
         }}
       >
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={listening ? 'narad-listening' : 'narad-idle'}
-            className="relative block"
-            initial={{ opacity: 0, scale: 0.85, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 8 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 24 }}
-          >
-            <motion.img
-              src={listening ? '/naradji/narad-listening.png' : '/naradji/narad-idle.png'}
-              alt={listening ? 'Naradji listening' : 'Hold to speak with Naradji'}
-              draggable={false}
-              className={[
-                'w-auto select-none drop-shadow-2xl',
-                listening ? 'h-24 sm:h-28' : 'h-36 sm:h-44',
-              ].join(' ')}
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </motion.span>
-        </AnimatePresence>
+        <motion.img
+          key={listening ? 'narad-listening' : 'narad-idle'}
+          src={listening ? '/naradji/narad-listening.png' : '/naradji/narad-idle.png'}
+          alt={listening ? 'Naradji listening' : 'Hold to speak with Naradji'}
+          draggable={false}
+          className={[
+            'w-auto select-none drop-shadow-2xl',
+            listening ? 'h-24 sm:h-28' : 'h-36 sm:h-44',
+          ].join(' ')}
+          initial={{ opacity: 0.85, scale: 0.92 }}
+          animate={{ opacity: 1, scale: 1, y: [0, -8, 0] }}
+          transition={{
+            opacity: { duration: 0.2 },
+            scale: { type: 'spring', stiffness: 380, damping: 24 },
+            y: { duration: 2.2, repeat: Infinity, ease: 'easeInOut' },
+          }}
+        />
       </button>
-      <p className="pointer-events-none text-xs text-stone-500">{hint}</p>
+
+      <AnimatePresence>
+        {bubbleText ? (
+          <motion.div
+            key={listening ? 'bubble-listen' : 'bubble-status'}
+            className={[
+              'max-w-[min(16rem,calc(100vw-7rem))] rounded-2xl bg-white px-3.5 py-3 text-sm leading-snug text-stone-900 shadow-[0_8px_28px_rgba(0,0,0,0.16)] ring-1 ring-black/5',
+              listening
+                ? 'order-2 mb-3 text-left'
+                : 'order-1 pointer-events-none text-center max-w-xs',
+            ].join(' ')}
+            initial={{ opacity: 0, scale: 0.94, y: 6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 4 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 26 }}
+          >
+            {bubbleText}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {!listening ? (
+        <p className="order-3 pointer-events-none text-xs text-stone-500">{hint}</p>
+      ) : null}
     </div>
   )
 }
