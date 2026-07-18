@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 
-import { AdminBar } from '@/components/AdminBar'
 import { LivePreviewListener } from '@/components/LivePreviewListener'
 import { Providers } from '@/providers'
 import { InitTheme } from '@/providers/Theme/InitTheme'
@@ -50,8 +49,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       </head>
       <body>
         <Providers>
-          {/* Naradji store is the product surface — keep AdminBar for the reveal beat */}
-          <AdminBar />
+          {/* No AdminBar on storefront — it auth-gates client-side and causes hydration mismatch.
+              Admin reveal is via /admin link in the store UI. */}
           <LivePreviewListener />
           <main>{children}</main>
         </Providers>

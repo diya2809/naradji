@@ -15,6 +15,7 @@ morphs → COD order with “haan pakka”.
 | Commit after each step | Easy to understand, demo, or roll back one piece |
 | Stay on `main` | Hackathon speed — no branch juggling |
 | Never commit `.env` | Secrets stay local |
+| Author as **Diya Shah** (`shahdiya304@gmail.com`) | Repo is diya2809/naradji — not challengerate/srjay |
 
 Recent trail (newest first):
 

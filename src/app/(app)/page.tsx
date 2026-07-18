@@ -1,6 +1,6 @@
-import { StoreCanvas } from '@/components/naradji/StoreCanvas'
-import { FALLBACK_CATALOG, getCatalog } from '@/lib/naradji/catalog'
 import type { Metadata } from 'next'
+import { StoreCanvasLoader } from '@/components/naradji/StoreCanvasLoader'
+import { FALLBACK_CATALOG, getCatalog } from '@/lib/naradji/catalog'
 
 export const metadata: Metadata = {
   title: 'Naradji — the store you finish in one breath',
@@ -23,5 +23,5 @@ export default async function HomePage({
     catalog = FALLBACK_CATALOG
   }
 
-  return <StoreCanvas initialCatalog={catalog} demo={demo} />
+  return <StoreCanvasLoader initialCatalog={catalog} demo={demo} />
 }

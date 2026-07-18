@@ -46,8 +46,7 @@ public/media
 BUILD_CONTEXT.md
 TODOS.md
 
-# Cursor / agent rules
-AGENTS.md
+# Cursor / agent rules (AGENTS.md is tracked — engineering principles for the team)
 CLAUDE.md
 .cursor/
 .cursorrules
