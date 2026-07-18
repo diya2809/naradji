@@ -4,6 +4,8 @@ Voice-morphing Indian daily-needs storefront for Cursor Hackathon Ahmedabad.
 
 Speak a grocery list → store morphs → COD with **haan pakka**.
 
+Build story (every step + skills): see [`STEPS.md`](./STEPS.md).
+
 ## Quick start
 
 ```bash
