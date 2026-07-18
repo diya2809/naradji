@@ -32,7 +32,7 @@ export function HeaderClient({ categories, header }: Props) {
       : `/login?redirect=${encodeURIComponent(pathname)}`
 
   return (
-    <div className="fixed inset-x-0 top-0 z-40 bg-background">
+    <header className="sticky top-0 z-40 shrink-0 bg-background">
       <div className="bg-background">
         <nav
           className="container relative flex items-center justify-between md:justify-start"
@@ -81,6 +81,6 @@ export function HeaderClient({ categories, header }: Props) {
           </div>
         </nav>
       </div>
-    </div>
+    </header>
   )
 }

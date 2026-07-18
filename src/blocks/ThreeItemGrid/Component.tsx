@@ -30,7 +30,7 @@ export const ThreeItemGridBlock: React.FC<
   return (
     <BlockWrapper mobileLayout={mobileLayout} textAlign={textAlign}>
       <BlockSectionHeading className="mb-6" title={heading || 'Picked for you'} />
-      <Grid className="grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <Grid className="grid-cols-2 gap-x-3 gap-y-5 sm:gap-x-4 sm:gap-y-6 lg:grid-cols-3">
         {items.map((product, index) => (
           <ProductCard imagePriority={index < 3} key={product.id} product={product} />
         ))}

@@ -13,10 +13,11 @@
    * 1 = browser default (16px). Adjust here — do not patch per-component font sizes.
    */
   --site-type-scale: 1.125;
-  /* Keep in sync: Header nav/announcement use these via siteLayoutVars */
+  /* Keep in sync: Header nav uses these via siteLayoutVars. Sticky header is in-flow — no spacer. */
   --site-header-nav-height: 4rem;
   --site-header-announcement-height: 2.5rem;
   --site-header-announcement-display-height: 0px;
+  /* Overlay offset (mobile sheet) — nav + optional announcement slot */
   --site-header-offset: calc(
     var(--site-header-nav-height) + var(--site-header-announcement-display-height, 0px)
   );
@@ -226,12 +227,6 @@
   .instagram-embed-slide iframe {
     @apply max-w-full bg-transparent;
     margin: 0 !important;
-  }
-
-  /* In-flow clearance for fixed header — height transitions with announcement bar. */
-  .site-header-spacer {
-    height: var(--site-header-offset);
-    transition: height 300ms ease-out;
   }
 
   /* Mobile bottom tab bar clearance — desktop has no bottom nav. */
