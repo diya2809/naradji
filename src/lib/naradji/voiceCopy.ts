@@ -12,7 +12,7 @@ export function greetingUISpec(): UISpec {
     layout: 'express',
     items: [],
     prefill: emptyPrefill(),
-    patch: false,
+    cartOp: 'add',
   }
 }
 

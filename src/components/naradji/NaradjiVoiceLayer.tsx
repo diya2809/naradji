@@ -14,7 +14,8 @@ import {
   buildReadbackLine,
   resolveCartLines,
 } from '@/lib/naradji/voiceCopy'
-import { syncVoiceItemsToStoreCart } from '@/lib/naradji/syncVoiceToCart'
+import { applyCartOp } from '@/lib/naradji/cartIntent'
+import { syncVoiceCartOp } from '@/lib/naradji/syncVoiceToCart'
 import { shippingToAddressPayload } from '@/lib/naradji/saveVoiceAddress'
 import { MicPill } from './MicPill'
 
@@ -74,20 +75,6 @@ function shouldMountVoice(pathname: string | null): boolean {
   return true
 }
 
-function mergeItems(prev: UISpec['items'], next: UISpec['items'], patch: boolean): UISpec['items'] {
-  if (patch) return next
-  const map = new Map(prev.map((i) => [i.id, { ...i }]))
-  for (const item of next) {
-    const existing = map.get(item.id)
-    if (existing) {
-      map.set(item.id, { ...existing, qty: (existing.qty || 1) + (item.qty || 1) })
-    } else {
-      map.set(item.id, item)
-    }
-  }
-  return [...map.values()]
-}
-
 function mergePrefill(prev: UISpec['prefill'], next: UISpec['prefill']): UISpec['prefill'] {
   return {
     ...emptyPrefill(),
@@ -108,7 +95,7 @@ export function NaradjiVoiceLayer() {
   const searchParams = useSearchParams()
   const demo = searchParams?.get('demo') === '1'
 
-  const { addItem } = useCart()
+  const { addItem, removeItem, clearCart, cart } = useCart()
   const { createAddress } = useAddresses()
 
   const catalog = useNaradjiStore((s) => s.catalog)
@@ -290,32 +277,78 @@ export function NaradjiVoiceLayer() {
         }
 
         const uttered = next.items || []
-        if (!uttered.length) {
+        const cartOp = next.cartOp ?? 'add'
+
+        if (cartOp === 'add' && !uttered.length) {
+          if (stillCurrent()) await clarify()
+          return
+        }
+        if (cartOp === 'remove' && !uttered.length) {
+          if (stillCurrent()) await say('Kya hataun? Item ka naam boliye.', next.language)
+          return
+        }
+        if (cartOp === 'replace' && !uttered.length) {
           if (stillCurrent()) await clarify()
           return
         }
 
         if (!stillCurrent()) return
         const cartNow = useNaradjiStore.getState().cartItems
-        const mergedItems = mergeItems(cartNow, uttered, next.patch)
+        const storeLines = (cart?.items ?? []).map((line) => ({
+          id: line.id,
+          quantity: line.quantity,
+          product:
+            typeof line.product === 'object' && line.product
+              ? { id: line.product.id }
+              : line.product,
+        }))
+
+        // Session cart can lag the Payload cart (prior buggy adds). For remove/clear,
+        // Payload lines are the storefront source of truth.
+        const mergedItems = applyCartOp(cartNow, uttered, cartOp)
         setCartItems(mergedItems)
         setUISpec({
           ...next,
+          cartOp,
           items: mergedItems,
           prefill: mergePrefill(livePrefill, next.prefill),
           layout: 'express',
         })
 
-        const { skipped } = await syncVoiceItemsToStoreCart(
-          { ...next, items: uttered },
+        const { skipped, removed } = await syncVoiceCartOp({
+          op: cartOp,
+          items: uttered,
+          desiredCart: mergedItems,
           catalog,
+          cartLines: storeLines,
           addItem,
-        )
+          removeItem,
+          clearCart,
+        })
         if (!stillCurrent()) return
         setCartSyncSkipped(skipped)
 
-        const lines = resolveCartLines({ ...next, items: uttered }, catalog)
-        if (!lines.length || skipped.length === uttered.length) {
+        if (cartOp === 'clear') {
+          go('/cart')
+          if (stillCurrent()) await say(next.naradji_line || 'Cart khali kar diya.', next.language)
+          return
+        }
+
+        if (cartOp === 'remove') {
+          go('/cart')
+          if (stillCurrent()) {
+            await say(
+              removed > 0
+                ? next.naradji_line || 'Cart se hata diya.'
+                : 'Yeh item cart mein nahi mila.',
+              next.language,
+            )
+          }
+          return
+        }
+
+        const lines = resolveCartLines({ ...next, items: mergedItems }, catalog)
+        if (!lines.length || (cartOp === 'add' && skipped.length === uttered.length)) {
           await say(
             'Narayan Narayan. Yeh item catalog mein nahi mila. Koi aur naam boliye — doodh, atta, chai…',
           )
@@ -331,9 +364,12 @@ export function NaradjiVoiceLayer() {
     },
     [
       addItem,
+      cart?.items,
       catalog,
+      clearCart,
       createAddress,
       go,
+      removeItem,
       setCartItems,
       setCartSyncSkipped,
       setMicState,

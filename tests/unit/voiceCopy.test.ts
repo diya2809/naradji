@@ -47,7 +47,7 @@ describe('voiceCopy', () => {
         { id: 'milk', qty: 2, reason: null },
       ],
       prefill: null,
-      patch: false,
+      cartOp: 'add',
     }
     const lines = resolveCartLines(uispec, catalog)
     expect(cartTotal(lines)).toBe(2 * 60 + 2 * 28)

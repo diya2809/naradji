@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       model: resolveModel(),
       schema: UISpecSchema,
       system:
-        'You are Naradji. Return UISpec. Mirror language. Short naradji_line. ids from catalog only. layouts: grid|express|confirm|compare. Compare/cheaper → compare layout. Address → fill prefill.shipping.',
+        'You are Naradji. Return UISpec. Mirror language. Short naradji_line. ids from catalog only. layouts: grid|express|confirm|compare. cartOp: add|remove|replace|clear. Remove/hata/nahi chahiye → cartOp remove with items to drop. Clear cart → cartOp clear. Compare/cheaper → compare layout. Address → fill prefill.shipping.',
       prompt: JSON.stringify({
         transcript,
         catalog: catalog.map(({ id, title, price, unit, aliases }) => ({

@@ -112,7 +112,8 @@ export function MicPill({
           const data = (await res.json()) as { transcript?: string }
           await finishWithText(data.transcript || '', gen)
         } catch {
-          await finishWithText(DEMO_BREATH_TRANSCRIPT, gen)
+          // Network/STT failure must not invent a grocery list.
+          await finishWithText('', gen)
         }
       }
       mediaRef.current = recorder
@@ -120,8 +121,8 @@ export function MicPill({
       recording.current = true
       setMicState('listening')
     } catch {
-      // Mic denied — fall back to demo utterance so the layer still works.
-      await finishWithText(DEMO_BREATH_TRANSCRIPT, gen)
+      // Mic denied: demo mode keeps rehearsal breath; otherwise empty → clarify.
+      await finishWithText(demo ? DEMO_BREATH_TRANSCRIPT : '', gen)
     }
   }
 

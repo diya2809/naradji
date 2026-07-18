@@ -18,10 +18,11 @@ describe('UISpec', () => {
         color: null,
         shipping: null,
       },
-      patch: false,
+      cartOp: 'add',
     })
     expect(parsed.items).toHaveLength(2)
     expect(parsed.layout).toBe('express')
+    expect(parsed.cartOp).toBe('add')
   })
 
   it('rejects unknown layouts (mission is stretch)', () => {

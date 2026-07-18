@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+/** How the utterance mutates the cart. Representation for applyCartOp / sync. */
+export const CartOpSchema = z.enum(['add', 'remove', 'replace', 'clear'])
+
 /** Spoken / COD shipping — nullable fields for OpenAI structured-output safety. */
 export const ShippingSchema = z
   .object({
@@ -40,10 +43,18 @@ export const UISpecSchema = z.object({
     }),
   ),
   prefill: PrefillSchema,
-  patch: z.boolean(),
+  /**
+   * Cart mutation for this turn.
+   * - add: merge uttered items into cart
+   * - remove: drop uttered ids from cart
+   * - replace: cart becomes uttered items only
+   * - clear: empty cart
+   */
+  cartOp: CartOpSchema,
 })
 
 export type UISpec = z.infer<typeof UISpecSchema>
+export type CartOp = z.infer<typeof CartOpSchema>
 
 export function emptyPrefill(): NonNullable<UISpec['prefill']> {
   return {
@@ -61,7 +72,7 @@ export const emptyUISpec = (): UISpec => ({
   layout: 'grid',
   items: [],
   prefill: emptyPrefill(),
-  patch: false,
+  cartOp: 'add',
 })
 
 /** Lenient: any shipping object counts (partial/empty OK — server fills defaults). */

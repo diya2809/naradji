@@ -88,7 +88,7 @@ export function answerProductQuery(transcript: string, catalog: LeanProduct[]): 
       layout: 'compare',
       items: [],
       prefill: emptyPrefill(),
-      patch: false,
+      cartOp: 'add',
     }
   }
 
@@ -110,6 +110,6 @@ export function answerProductQuery(transcript: string, catalog: LeanProduct[]): 
     layout: 'compare',
     items,
     prefill: emptyPrefill(),
-    patch: false,
+    cartOp: 'add',
   }
 }

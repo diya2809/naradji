@@ -31,11 +31,12 @@ export async function POST(req: Request) {
 
   const key = process.env.SARVAM_API_KEY
   if (!key) {
-    // No key → still deliverable for rehearsal
+    // No key → empty transcript (clarify), never invent a grocery list.
+    // Explicit demo=1 above is the only path that injects DEMO_TRANSCRIPT.
     return NextResponse.json({
-      transcript: DEMO_TRANSCRIPT,
+      transcript: '',
       language_code: 'hi-IN',
-      mode: 'demo-no-key',
+      mode: 'no-key',
     })
   }
 
@@ -64,8 +65,7 @@ export async function POST(req: Request) {
       mode: 'codemix',
     })
 
-    const transcript =
-      (response as { transcript?: string }).transcript?.trim() || DEMO_TRANSCRIPT
+    const transcript = (response as { transcript?: string }).transcript?.trim() || ''
 
     return NextResponse.json({
       transcript,
@@ -74,10 +74,11 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     console.error('[stt]', err)
+    // Fail visibly via empty transcript → Naradji clarifies. Do not inject demo grocery.
     return NextResponse.json({
-      transcript: DEMO_TRANSCRIPT,
+      transcript: '',
       language_code: 'hi-IN',
-      mode: 'demo-fallback',
+      mode: 'stt-error',
       error: err instanceof Error ? err.message : 'stt failed',
     })
   } finally {
