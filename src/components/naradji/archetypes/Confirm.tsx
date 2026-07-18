@@ -8,10 +8,12 @@ export function Confirm({
   uispec,
   catalog,
   orderId,
+  onConfirm,
 }: {
   uispec: UISpec
   catalog: LeanProduct[]
   orderId: string | null
+  onConfirm?: () => void
 }) {
   const byId = new Map(catalog.map((p) => [p.id, p]))
   const lines = uispec.items
@@ -50,11 +52,22 @@ export function Confirm({
         <span>COD total</span>
         <span className="tabular-nums">₹{total}</span>
       </div>
-      <p className="mt-6 text-center text-sm text-stone-500">
-        {orderId
-          ? `Order ${orderId} placed — check /admin`
-          : "Bol do “haan pakka” — ya tap Confirm"}
-      </p>
+      {orderId ? (
+        <p className="mt-6 text-center text-sm text-stone-500">Order {orderId} — check /admin</p>
+      ) : (
+        <div className="mt-6 space-y-2">
+          {onConfirm ? (
+            <button
+              type="button"
+              className="w-full rounded-2xl bg-stone-900 py-3 text-sm font-medium text-stone-50"
+              onClick={onConfirm}
+            >
+              Confirm · haan pakka
+            </button>
+          ) : null}
+          <p className="text-center text-sm text-stone-500">Ya boliye “haan pakka”</p>
+        </div>
+      )}
     </motion.div>
   )
 }

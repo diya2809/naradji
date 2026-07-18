@@ -38,16 +38,15 @@ function mergeAliasFirst(
   const byId = new Map(catalog.map((p) => [p.id, p]))
   const validLlm = llm.items.filter((i) => byId.has(i.id))
 
+  // Alias map is authoritative when it hits. Do not let the LLM append every
+  // Maggi/atta variant from a 400-SKU catalog on top of those hits.
   const items =
     aliasHits.length > 0
-      ? [
-          ...aliasHits.map((h) => ({
-            id: h.id,
-            qty: h.qty,
-            reason: null as string | null,
-          })),
-          ...validLlm.filter((i) => !aliasHits.some((h) => h.id === i.id)),
-        ]
+      ? aliasHits.map((h) => ({
+          id: h.id,
+          qty: h.qty,
+          reason: null as string | null,
+        }))
       : validLlm
 
   const layout =
@@ -138,12 +137,13 @@ export function interpretOffline(
       : /[\u0900-\u097F]/.test(transcript)
         ? 'hi'
         : 'hinglish',
+    // Client replaces with cart readback after sync; keep short offline default.
     naradji_line:
       items.length > 0
         ? cod
-          ? 'Theek hai — COD ready. Bol do haan pakka.'
-          : `Mil gaya — ${items.length} items. COD chahiye?`
-        : 'Dobara boliye — atta, anda, Maggi…',
+          ? `${items.length} items cart mein. Haan pakka?`
+          : `${items.length} items cart mein.`
+        : 'Match nahi hua. Dobara boliye.',
     layout,
     items,
     prefill: { payment: cod ? 'cod' : null, address_id: null, size: null, color: null },

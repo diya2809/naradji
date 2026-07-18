@@ -1,47 +1,49 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { DEMO_BREATH_TRANSCRIPT } from '@/lib/naradji/demoBreath'
 import { useNaradjiStore, type MicState } from '@/lib/naradji/store'
 
 const LABEL: Record<MicState, string> = {
-  idle: 'Hold to speak',
+  idle: 'Talk to Naradji',
+  greeting: 'Naradji…',
   listening: 'Listening…',
-  transcribing: 'Transcribing…',
-  morphing: 'Morphing…',
-  speaking: 'Speaking…',
+  transcribing: 'Samajh rahe hain…',
+  adding: 'Cart mein…',
+  speaking: 'Bol rahe hain…',
 }
+
+const HOLD_MS = 220
 
 export function MicPill({
   demo,
+  onOpenSession,
   onTranscript,
 }: {
   demo: boolean
+  /** First tap: open sheet + greeting. */
+  onOpenSession: () => void | Promise<void>
   onTranscript: (text: string) => void | Promise<void>
 }) {
   const micState = useNaradjiStore((s) => s.micState)
+  const sessionOpen = useNaradjiStore((s) => s.sessionOpen)
   const setMicState = useNaradjiStore((s) => s.setMicState)
   const setTranscript = useNaradjiStore((s) => s.setTranscript)
   const transcript = useNaradjiStore((s) => s.transcript)
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const recording = useRef(false)
   const [supported, setSupported] = useState(true)
 
   useEffect(() => {
     setSupported(typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia)
   }, [])
 
-  async function start() {
-    if (micState !== 'idle' && micState !== 'speaking') return
-    if (demo) {
+  async function captureAndTranscribe() {
+    if (demo || !supported) {
       setMicState('transcribing')
-      const text = 'do kilo atta, ek dozen anda, paanch Maggi, do Parle-G, COD'
-      setTranscript(text)
-      await onTranscript(text)
-      return
-    }
-    if (!supported) {
-      setMicState('transcribing')
-      const text = 'do kilo atta, ek dozen anda, paanch Maggi, do Parle-G, COD'
+      const text = DEMO_BREATH_TRANSCRIPT
       setTranscript(text)
       await onTranscript(text)
       return
@@ -58,46 +60,80 @@ export function MicPill({
       }
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop())
+        recording.current = false
         setMicState('transcribing')
         const blob = new Blob(chunksRef.current, { type: mime })
         const form = new FormData()
         form.append('file', blob, 'utterance.webm')
-        if (demo) form.append('demo', '1')
         try {
-          const res = await fetch(demo ? '/api/stt?demo=1' : '/api/stt', {
-            method: 'POST',
-            body: form,
-          })
+          const res = await fetch('/api/stt', { method: 'POST', body: form })
           const data = (await res.json()) as { transcript?: string }
           const text = data.transcript || ''
           setTranscript(text)
           await onTranscript(text)
         } catch {
-          const text = 'do kilo atta, ek dozen anda, paanch Maggi, do Parle-G, COD'
+          const text = DEMO_BREATH_TRANSCRIPT
           setTranscript(text)
           await onTranscript(text)
         }
       }
       mediaRef.current = recorder
       recorder.start()
+      recording.current = true
       setMicState('listening')
     } catch {
       setMicState('transcribing')
-      const text = 'do kilo atta, ek dozen anda, paanch Maggi, do Parle-G, COD'
+      const text = DEMO_BREATH_TRANSCRIPT
       setTranscript(text)
       await onTranscript(text)
     }
   }
 
-  function stop() {
+  function stopRecording() {
     const r = mediaRef.current
     if (r && r.state === 'recording') r.stop()
     mediaRef.current = null
   }
 
+  function onPointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
+    e.preventDefault()
+    if (micState === 'greeting' || micState === 'transcribing' || micState === 'adding') return
+
+    if (!sessionOpen) {
+      void onOpenSession()
+      return
+    }
+
+    // Hold to speak once session is open
+    holdTimer.current = setTimeout(() => {
+      holdTimer.current = null
+      void captureAndTranscribe()
+    }, HOLD_MS)
+  }
+
+  function onPointerUp(e: ReactPointerEvent<HTMLButtonElement>) {
+    e.preventDefault()
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current)
+      holdTimer.current = null
+      // Short tap while open: start a quick listen (demo / shy mic)
+      if (sessionOpen && micState === 'idle' && (demo || !supported)) {
+        void captureAndTranscribe()
+      }
+      return
+    }
+    if (recording.current || micState === 'listening') stopRecording()
+  }
+
+  const hint = !sessionOpen
+    ? 'Tap mic — Naradji opens'
+    : micState === 'idle'
+      ? 'Hold to speak your list · “haan pakka” to confirm'
+      : LABEL[micState]
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex flex-col items-center gap-2 px-4">
-      {transcript ? (
+      {transcript && sessionOpen ? (
         <div className="pointer-events-none max-w-xl rounded-full bg-stone-900/85 px-4 py-2 text-center text-sm text-stone-50 shadow-lg backdrop-blur">
           {transcript}
         </div>
@@ -110,22 +146,14 @@ export function MicPill({
             ? 'bg-red-600 text-white ring-4 ring-red-300/50'
             : 'bg-stone-900 text-stone-50 hover:bg-stone-800',
         ].join(' ')}
-        onPointerDown={(e) => {
-          e.preventDefault()
-          void start()
-        }}
-        onPointerUp={(e) => {
-          e.preventDefault()
-          stop()
-        }}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
         onPointerLeave={() => {
-          if (micState === 'listening') stop()
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'd' && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault()
-            void start()
+          if (holdTimer.current) {
+            clearTimeout(holdTimer.current)
+            holdTimer.current = null
           }
+          if (micState === 'listening') stopRecording()
         }}
       >
         <span
@@ -136,9 +164,7 @@ export function MicPill({
         />
         {LABEL[micState]}
       </button>
-      <p className="pointer-events-none text-xs text-stone-500">
-        Hold mic · or press Demo chip · confirm with “haan pakka”
-      </p>
+      <p className="pointer-events-none text-xs text-stone-500">{hint}</p>
     </div>
   )
 }
