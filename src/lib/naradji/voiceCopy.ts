@@ -1,5 +1,5 @@
 import type { LeanProduct } from './catalog'
-import type { UISpec } from './uispec'
+import { emptyPrefill, type UISpec } from './uispec'
 
 /** Opening line when the sheet rises — short, then listen. */
 export const GREETING_LINE =
@@ -11,7 +11,7 @@ export function greetingUISpec(): UISpec {
     naradji_line: GREETING_LINE,
     layout: 'express',
     items: [],
-    prefill: { payment: null, address_id: null, size: null, color: null },
+    prefill: emptyPrefill(),
     patch: false,
   }
 }

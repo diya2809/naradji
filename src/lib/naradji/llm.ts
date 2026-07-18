@@ -1,22 +1,25 @@
 import { createGateway, streamObject } from 'ai'
 import { openai } from '@ai-sdk/openai'
-import { UISpecSchema, type UISpec } from './uispec'
+import { UISpecSchema, emptyPrefill, type UISpec } from './uispec'
 import type { LeanProduct } from './catalog'
 import { matchAliases, wantsCOD } from './aliases'
+import { addressReadback, looksLikeAddress, parseSpokenAddress } from './parseAddress'
+import { answerProductQuery, looksLikeProductQuery } from './productQuery'
 
 const NARADJI_SYSTEM = `You are Naradji, the voice of an Indian daily-needs storefront.
 Return ONLY a UISpec JSON object matching the schema.
 Rules:
 - Mirror the user's language in language + naradji_line (gu/hi/en/hinglish).
-- naradji_line: ONE short spoken line, max ~12 words.
-- Day-one layouts only: grid | express | confirm.
-- Grocery lists with multiple items → layout "express".
-- When user is ready to pay / COD and items are set → layout "confirm".
-- items[].id MUST be one of the catalog ids provided. Never invent SKUs.
-- qty defaults to 1. reason is a short nullable why (or null).
+- naradji_line: ONE short spoken line, max ~16 words.
+- Layouts: grid | express | confirm | compare.
+- Grocery lists → layout "express", items from catalog ids only.
+- Compare / cheaper / which brand → layout "compare", put candidate ids in items, answer in naradji_line.
+- Address dictation → keep prior items, fill prefill.shipping, short confirm line.
+- COD ready → layout "confirm" when items exist.
+- qty defaults to 1. reason nullable.
 - prefill.payment is "cod" when they said COD, else null.
-- patch:true only when correcting a previous list (e.g. "nahi Maggi nahi").
-- Prefer alias-matched items; fill gaps from catalog titles.`
+- patch:true only when correcting a previous list.
+- Prefer alias-matched items; never invent SKUs.`
 
 function leanForPrompt(catalog: LeanProduct[]) {
   return catalog.map(({ id, title, price, unit, category, aliases }) => ({
@@ -29,17 +32,34 @@ function leanForPrompt(catalog: LeanProduct[]) {
   }))
 }
 
+function detectLanguage(transcript: string): UISpec['language'] {
+  if (/[\u0A80-\u0AFF]/.test(transcript)) return 'gu'
+  if (/[\u0900-\u097F]/.test(transcript)) return 'hi'
+  return 'hinglish'
+}
+
 function mergeAliasFirst(
   transcript: string,
   catalog: LeanProduct[],
   llm: UISpec,
 ): UISpec {
+  if (llm.layout === 'compare') {
+    const byId = new Map(catalog.map((p) => [p.id, p]))
+    return {
+      ...llm,
+      items: llm.items.filter((i) => byId.has(i.id)),
+      prefill: {
+        ...emptyPrefill(),
+        ...llm.prefill,
+        shipping: llm.prefill?.shipping ?? null,
+      },
+    }
+  }
+
   const aliasHits = matchAliases(transcript, catalog)
   const byId = new Map(catalog.map((p) => [p.id, p]))
   const validLlm = llm.items.filter((i) => byId.has(i.id))
 
-  // Alias map is authoritative when it hits. Do not let the LLM append every
-  // Maggi/atta variant from a 400-SKU catalog on top of those hits.
   const items =
     aliasHits.length > 0
       ? aliasHits.map((h) => ({
@@ -65,15 +85,14 @@ function mergeAliasFirst(
     layout: items.length === 0 ? 'grid' : layout,
     items,
     prefill: {
+      ...emptyPrefill(),
+      ...llm.prefill,
       payment,
-      address_id: llm.prefill?.address_id ?? null,
-      size: llm.prefill?.size ?? null,
-      color: llm.prefill?.color ?? null,
+      shipping: llm.prefill?.shipping ?? null,
     },
   }
 }
 
-/** Fast OpenAI model for morph. Gateway optional. */
 export function resolveModel() {
   if (process.env.AI_GATEWAY_API_KEY) {
     return createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY })('openai/gpt-4o-mini')
@@ -85,7 +104,6 @@ export function hasLLMKey() {
   return Boolean(process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY)
 }
 
-/** Alias-first interpret via AI SDK streamObject (gpt-4o-mini). */
 export function interpretStream(opts: {
   transcript: string
   catalog: LeanProduct[]
@@ -115,11 +133,43 @@ export function finalizeUISpec(
   return mergeAliasFirst(transcript, catalog, llm)
 }
 
-/** Deterministic demo path when LLM/keys missing. */
+/**
+ * Deterministic interpret: address → compare/Q&A → alias cart.
+ * Keeps LLM off the hot path when patterns hit.
+ */
 export function interpretOffline(
   transcript: string,
   catalog: LeanProduct[],
+  state: UISpec | null = null,
 ): UISpec {
+  const language = detectLanguage(transcript)
+  const prevItems = state?.items ?? []
+  const prevPrefill = state?.prefill ?? emptyPrefill()
+
+  if (looksLikeAddress(transcript)) {
+    const shipping = parseSpokenAddress(transcript)
+    if (shipping) {
+      return {
+        language,
+        naradji_line: addressReadback(shipping),
+        layout: prevItems.length ? 'confirm' : 'express',
+        items: prevItems,
+        prefill: {
+          ...emptyPrefill(),
+          ...prevPrefill,
+          payment: 'cod',
+          shipping,
+        },
+        patch: false,
+      }
+    }
+  }
+
+  if (looksLikeProductQuery(transcript)) {
+    const answered = answerProductQuery(transcript, catalog)
+    if (answered) return answered
+  }
+
   const hits = matchAliases(transcript, catalog)
   const cod = wantsCOD(transcript)
   const items = hits.map((h) => ({ id: h.id, qty: h.qty, reason: null as string | null }))
@@ -132,12 +182,7 @@ export function interpretOffline(
         ? 'express'
         : 'grid'
   return {
-    language: /[\u0A80-\u0AFF]/.test(transcript)
-      ? 'gu'
-      : /[\u0900-\u097F]/.test(transcript)
-        ? 'hi'
-        : 'hinglish',
-    // Client replaces with cart readback after sync; keep short offline default.
+    language,
     naradji_line:
       items.length > 0
         ? cod
@@ -146,7 +191,11 @@ export function interpretOffline(
         : 'Match nahi hua. Dobara boliye.',
     layout,
     items,
-    prefill: { payment: cod ? 'cod' : null, address_id: null, size: null, color: null },
+    prefill: {
+      ...emptyPrefill(),
+      payment: cod ? 'cod' : null,
+      shipping: prevPrefill?.shipping ?? null,
+    },
     patch: /nahi|नहीं|ના/.test(transcript.toLowerCase()),
   }
 }

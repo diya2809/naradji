@@ -2,9 +2,38 @@ import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCatalog } from '@/lib/naradji/catalog'
-import { UISpecSchema } from '@/lib/naradji/uispec'
+import { UISpecSchema, hasUsableShipping, type ShippingAddress } from '@/lib/naradji/uispec'
+import { rupeesToMinor } from '@/lib/currency'
 
 export const dynamic = 'force-dynamic'
+
+function resolveShipping(
+  fromSpec: ShippingAddress | null | undefined,
+  body: { phone?: string; email?: string } | null,
+): ShippingAddress {
+  if (fromSpec && hasUsableShipping(fromSpec)) {
+    return {
+      name: fromSpec.name || 'Voice customer',
+      phone: fromSpec.phone || body?.phone || '0000000000',
+      addressLine1: fromSpec.addressLine1 || 'Voice address',
+      addressLine2: fromSpec.addressLine2,
+      city: fromSpec.city || 'Ahmedabad',
+      state: fromSpec.state || 'GJ',
+      postalCode: fromSpec.postalCode || '380001',
+      country: fromSpec.country || 'IN',
+    }
+  }
+  return {
+    name: 'Naradji Demo',
+    phone: body?.phone || '0000000000',
+    addressLine1: 'COD — address on call',
+    addressLine2: 'Voice order',
+    city: 'Ahmedabad',
+    state: 'GJ',
+    postalCode: '380001',
+    country: 'IN',
+  }
+}
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null)
@@ -16,6 +45,17 @@ export async function POST(req: Request) {
   const uispec = parsed.data
   if (!uispec.items.length) {
     return NextResponse.json({ error: 'no items' }, { status: 400 })
+  }
+
+  const shipping = uispec.prefill?.shipping
+  if (!hasUsableShipping(shipping)) {
+    return NextResponse.json(
+      {
+        error: 'address_required',
+        message: 'Boliye apna address — phir haan pakka.',
+      },
+      { status: 400 },
+    )
   }
 
   const catalog = await getCatalog()
@@ -36,12 +76,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'no valid catalog items' }, { status: 400 })
   }
 
-  const amount = lines.reduce((s, l) => s + l.lineTotal, 0)
+  const amountRupees = lines.reduce((s, l) => s + l.lineTotal, 0)
+  const amount = rupeesToMinor(amountRupees)
+  const ship = resolveShipping(shipping, body)
 
   try {
     const payload = await getPayload({ config })
 
-    // Resolve product docs by slug when available
     const productDocs = await Promise.all(
       lines.map(async (line) => {
         const { docs } = await payload.find({
@@ -59,29 +100,31 @@ export async function POST(req: Request) {
       data: {
         status: 'processing',
         amount,
-        currency: 'USD',
+        currency: 'INR',
         customerEmail: body?.email || 'demo@naradji.local',
         items: productDocs.map(({ line, docId }) => ({
           product: docId || undefined,
           quantity: line.quantity,
         })),
         shippingAddress: {
-          firstName: 'Naradji',
-          lastName: 'Demo',
-          addressLine1: 'COD — address on call',
-          city: 'Ahmedabad',
-          state: 'GJ',
-          postalCode: '380001',
-          country: 'IN',
-          phone: body?.phone || '',
+          name: ship.name || 'Voice customer',
+          phone: ship.phone || '0000000000',
+          addressLine1: ship.addressLine1 || 'Voice address',
+          addressLine2: ship.addressLine2 || undefined,
+          city: ship.city || 'Ahmedabad',
+          state: ship.state || 'GJ',
+          postalCode: ship.postalCode || '380001',
+          country: ship.country || 'IN',
         },
       },
     })
 
     return NextResponse.json({
       orderId: order.id,
-      amount,
+      amount: amountRupees,
+      currency: 'INR',
       payment: 'cod',
+      shipping: ship,
       items: lines.map((l) => ({
         id: l.product.id,
         title: l.product.title,
@@ -91,13 +134,14 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     console.error('[order]', err)
-    // Optimistic demo survival: return a fake id so UI can complete
     const fakeId = `local-${Date.now()}`
     return NextResponse.json({
       orderId: fakeId,
-      amount,
+      amount: amountRupees,
+      currency: 'INR',
       payment: 'cod',
       mode: 'local-fallback',
+      shipping: ship,
       items: lines.map((l) => ({
         id: l.product.id,
         title: l.product.title,

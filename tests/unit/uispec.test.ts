@@ -16,6 +16,7 @@ describe('UISpec', () => {
         address_id: null,
         size: null,
         color: null,
+        shipping: null,
       },
       patch: false,
     })

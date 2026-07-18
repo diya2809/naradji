@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { generateObject } from 'ai'
 import { getCatalog } from '@/lib/naradji/catalog'
+import { matchAliases } from '@/lib/naradji/aliases'
+import { looksLikeAddress } from '@/lib/naradji/parseAddress'
+import { looksLikeProductQuery } from '@/lib/naradji/productQuery'
 import {
   finalizeUISpec,
   hasLLMKey,
@@ -28,8 +31,25 @@ export async function POST(req: Request) {
   const catalog = await getCatalog()
   const state = body.state ?? null
 
+  // Address + product Q&A before alias cart (compare cues can also match SKUs).
+  if (!body.stream && (looksLikeAddress(transcript) || looksLikeProductQuery(transcript))) {
+    const offline = interpretOffline(transcript, catalog, state)
+    const mode = looksLikeAddress(transcript)
+      ? 'address'
+      : offline.layout === 'compare'
+        ? 'compare'
+        : 'offline'
+    return NextResponse.json({ uispec: offline, mode })
+  }
+
+  const aliasHits = matchAliases(transcript, catalog)
+  if (aliasHits.length > 0 && !body.stream) {
+    const offline = interpretOffline(transcript, catalog, state)
+    return NextResponse.json({ uispec: offline, mode: 'alias' })
+  }
+
   if (!hasLLMKey()) {
-    const offline = interpretOffline(transcript, catalog)
+    const offline = interpretOffline(transcript, catalog, state)
     return NextResponse.json({ uispec: offline, mode: 'offline' })
   }
 
@@ -43,7 +63,7 @@ export async function POST(req: Request) {
       model: resolveModel(),
       schema: UISpecSchema,
       system:
-        'You are Naradji. Return UISpec. Mirror language. One short naradji_line. ids from catalog only. layouts: grid|express|confirm.',
+        'You are Naradji. Return UISpec. Mirror language. Short naradji_line. ids from catalog only. layouts: grid|express|confirm|compare. Compare/cheaper → compare layout. Address → fill prefill.shipping.',
       prompt: JSON.stringify({
         transcript,
         catalog: catalog.map(({ id, title, price, unit, aliases }) => ({
@@ -60,7 +80,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ uispec, mode: 'llm' })
   } catch (err) {
     console.error('[interpret]', err)
-    const offline = interpretOffline(transcript, catalog)
+    const offline = interpretOffline(transcript, catalog, state)
     return NextResponse.json({ uispec: offline, mode: 'offline-fallback' })
   }
 }

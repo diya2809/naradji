@@ -15,6 +15,8 @@ export type MicState =
 type NaradjiStore = {
   catalog: LeanProduct[]
   uispec: UISpec
+  /** Session cart lines — survives compare Q&A overlays. */
+  cartItems: UISpec['items']
   transcript: string
   micState: MicState
   sessionOpen: boolean
@@ -22,6 +24,7 @@ type NaradjiStore = {
   cartSyncSkipped: string[]
   setCatalog: (catalog: LeanProduct[]) => void
   setUISpec: (uispec: UISpec) => void
+  setCartItems: (items: UISpec['items']) => void
   patchUISpec: (partial: Partial<UISpec>) => void
   setTranscript: (transcript: string) => void
   setMicState: (micState: MicState) => void
@@ -34,6 +37,7 @@ type NaradjiStore = {
 export const useNaradjiStore = create<NaradjiStore>((set) => ({
   catalog: [],
   uispec: emptyUISpec(),
+  cartItems: [],
   transcript: '',
   micState: 'idle',
   sessionOpen: false,
@@ -41,6 +45,7 @@ export const useNaradjiStore = create<NaradjiStore>((set) => ({
   cartSyncSkipped: [],
   setCatalog: (catalog) => set({ catalog }),
   setUISpec: (uispec) => set({ uispec }),
+  setCartItems: (cartItems) => set({ cartItems }),
   patchUISpec: (partial) => set((s) => ({ uispec: { ...s.uispec, ...partial } })),
   setTranscript: (transcript) => set({ transcript }),
   setMicState: (micState) => set({ micState }),
@@ -50,6 +55,7 @@ export const useNaradjiStore = create<NaradjiStore>((set) => ({
   reset: () =>
     set({
       uispec: emptyUISpec(),
+      cartItems: [],
       transcript: '',
       micState: 'idle',
       sessionOpen: false,
