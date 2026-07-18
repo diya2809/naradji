@@ -23,6 +23,8 @@ const CLARIFY_LINE =
   'Narayan Narayan. Samajh nahi aaya. Dobara boliye — doodh, atta, chai… ya poochhiye kaun sasta.'
 
 async function playTts(text: string, language: string, abort: AbortController) {
+  let objectUrl: string | null = null
+  let audio: HTMLAudioElement | null = null
   try {
     const res = await fetch('/api/tts', {
       method: 'POST',
@@ -30,18 +32,38 @@ async function playTts(text: string, language: string, abort: AbortController) {
       body: JSON.stringify({ text, language }),
       signal: abort.signal,
     })
-    if (!res.ok || res.status === 204) return
+    if (!res.ok || res.status === 204 || abort.signal.aborted) return
     const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const audio = new Audio(url)
+    if (abort.signal.aborted) return
+    objectUrl = URL.createObjectURL(blob)
+    audio = new Audio(objectUrl)
     await new Promise<void>((resolve) => {
-      audio.onended = () => resolve()
-      audio.onerror = () => resolve()
-      void audio.play().then(undefined, () => resolve())
+      const done = () => {
+        abort.signal.removeEventListener('abort', onAbort)
+        resolve()
+      }
+      const onAbort = () => {
+        try {
+          audio?.pause()
+          if (audio) audio.src = ''
+        } catch {
+          // ignore
+        }
+        done()
+      }
+      if (abort.signal.aborted) {
+        onAbort()
+        return
+      }
+      abort.signal.addEventListener('abort', onAbort, { once: true })
+      audio!.onended = () => done()
+      audio!.onerror = () => done()
+      void audio!.play().then(undefined, () => done())
     })
-    URL.revokeObjectURL(url)
   } catch {
-    // TTS never blocks platform UI
+    // TTS never blocks platform UI (including abort)
+  } finally {
+    if (objectUrl) URL.revokeObjectURL(objectUrl)
   }
 }
 
@@ -98,10 +120,19 @@ export function NaradjiVoiceLayer() {
   const setCartSyncSkipped = useNaradjiStore((s) => s.setCartSyncSkipped)
 
   const ttsAbort = useRef<AbortController | null>(null)
+  /** Bumps when user barges in — stale speak/interpret results are ignored. */
+  const turnEpoch = useRef(0)
   const typedRef = useRef<HTMLInputElement>(null)
   const greetedRef = useRef(false)
   const [catalogError, setCatalogError] = useState(false)
   const [statusLine, setStatusLine] = useState<string | null>(null)
+
+  const bargeIn = useCallback(() => {
+    turnEpoch.current += 1
+    ttsAbort.current?.abort()
+    ttsAbort.current = null
+    setStatusLine(null)
+  }, [])
 
   useEffect(() => {
     if (!shouldMountVoice(pathname)) return
@@ -121,15 +152,22 @@ export function NaradjiVoiceLayer() {
   }, [pathname, setCatalog])
 
   const speak = useCallback(
-    async (text: string, language = 'hinglish') => {
+    async (text: string, language = 'hinglish', forEpoch?: number) => {
+      // forEpoch: caller's turn — skip if user already barged in.
+      const epoch = forEpoch ?? turnEpoch.current
+      if (turnEpoch.current !== epoch) return
       setStatusLine(text)
       ttsAbort.current?.abort()
       ttsAbort.current = new AbortController()
+      if (turnEpoch.current !== epoch) return
       setMicState('speaking')
       try {
         await playTts(text, language, ttsAbort.current)
       } finally {
-        setMicState('idle')
+        // Don't clobber listening/transcribing if user barged in mid-TTS.
+        if (turnEpoch.current === epoch && useNaradjiStore.getState().micState === 'speaking') {
+          setMicState('idle')
+        }
       }
     },
     [setMicState],
@@ -143,15 +181,19 @@ export function NaradjiVoiceLayer() {
     [demo, router],
   )
 
-  const clarify = useCallback(async () => {
-    await speak(CLARIFY_LINE)
-  }, [speak])
-
   const onTranscript = useCallback(
     async (text: string) => {
+      const epoch = turnEpoch.current
+      const stillCurrent = () => turnEpoch.current === epoch
+      const say = (line: string, language = 'hinglish') => speak(line, language, epoch)
+      const clarify = () => say(CLARIFY_LINE)
+      const setBusy = (state: 'adding' | 'transcribing') => {
+        if (stillCurrent()) setMicState(state)
+      }
+
       const trimmed = text.trim()
       if (!trimmed) {
-        await clarify()
+        if (stillCurrent()) await clarify()
         return
       }
 
@@ -171,29 +213,34 @@ export function NaradjiVoiceLayer() {
 
       // COD confirm → real checkout (platform UI), not a morph confirm card.
       if (isConfirmTranscript(trimmed)) {
-        setMicState('adding')
+        if (!stillCurrent()) return
+        setBusy('adding')
         if (!liveCart.length) {
-          await speak('Pehle list boliye — phir cart se checkout.')
+          await say('Pehle list boliye — phir cart se checkout.')
           return
         }
+        if (!stillCurrent()) return
         go('/cart')
         go('/checkout')
-        await speak('Checkout khol diya. Wahan confirm kar lijiye.')
+        if (stillCurrent()) await say('Checkout khol diya. Wahan confirm kar lijiye.')
         return
       }
 
-      setMicState('adding')
+      if (!stillCurrent()) return
+      setBusy('adding')
       try {
         const res = await fetch('/api/interpret', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transcript: trimmed, state: liveSpec }),
         })
+        if (!stillCurrent()) return
         const data = (await res.json()) as { uispec: UISpec; mode?: string }
         const next = data.uispec || emptyUISpec()
 
         // Compare / Q&A — voice answer only; open cheapest product page when we have an id.
         if (next.layout === 'compare' || data.mode === 'compare') {
+          if (!stillCurrent()) return
           setUISpec({
             ...next,
             prefill: mergePrefill(livePrefill, next.prefill),
@@ -202,7 +249,7 @@ export function NaradjiVoiceLayer() {
           if (cheapest?.id) {
             go(`/products/${cheapest.id}`)
           }
-          await speak(next.naradji_line || CLARIFY_LINE, next.language)
+          if (stillCurrent()) await say(next.naradji_line || CLARIFY_LINE, next.language)
           return
         }
 
@@ -210,9 +257,10 @@ export function NaradjiVoiceLayer() {
         if (data.mode === 'address' || next.prefill?.shipping) {
           const shipping = next.prefill?.shipping
           if (!shipping) {
-            await clarify()
+            if (stillCurrent()) await clarify()
             return
           }
+          if (!stillCurrent()) return
           const prefill = mergePrefill(livePrefill, next.prefill)
           setUISpec({
             ...next,
@@ -222,16 +270,18 @@ export function NaradjiVoiceLayer() {
           try {
             const payload = shippingToAddressPayload(shipping)
             await createAddress(payload)
+            if (!stillCurrent()) return
             go('/account/addresses')
-            await speak(
+            await say(
               next.naradji_line ||
                 `Address save ho gaya: ${payload.addressLine1}, ${payload.city}. Checkout pe jaa sakte ho.`,
               next.language,
             )
           } catch {
+            if (!stillCurrent()) return
             // Guest / auth fail — still acknowledge and send to checkout to fill form.
             go('/checkout')
-            await speak(
+            await say(
               'Address note kiya. Checkout pe check kar lijiye — kuch missing ho to wahan bhar dena.',
               next.language,
             )
@@ -241,10 +291,11 @@ export function NaradjiVoiceLayer() {
 
         const uttered = next.items || []
         if (!uttered.length) {
-          await clarify()
+          if (stillCurrent()) await clarify()
           return
         }
 
+        if (!stillCurrent()) return
         const cartNow = useNaradjiStore.getState().cartItems
         const mergedItems = mergeItems(cartNow, uttered, next.patch)
         setCartItems(mergedItems)
@@ -260,11 +311,12 @@ export function NaradjiVoiceLayer() {
           catalog,
           addItem,
         )
+        if (!stillCurrent()) return
         setCartSyncSkipped(skipped)
 
         const lines = resolveCartLines({ ...next, items: uttered }, catalog)
         if (!lines.length || skipped.length === uttered.length) {
-          await speak(
+          await say(
             'Narayan Narayan. Yeh item catalog mein nahi mila. Koi aur naam boliye — doodh, atta, chai…',
           )
           return
@@ -272,15 +324,14 @@ export function NaradjiVoiceLayer() {
 
         go('/cart')
         const readback = buildReadbackLine(lines, { askConfirm: false })
-        await speak(`${readback} Cart khol diya.`, next.language)
+        if (stillCurrent()) await say(`${readback} Cart khol diya.`, next.language)
       } catch {
-        await clarify()
+        if (stillCurrent()) await clarify()
       }
     },
     [
       addItem,
       catalog,
-      clarify,
       createAddress,
       go,
       setCartItems,
@@ -382,7 +433,7 @@ export function NaradjiVoiceLayer() {
         </div>
       ) : null}
 
-      <MicPill demo={demo} onTranscript={onTranscript} />
+      <MicPill demo={demo} onTranscript={onTranscript} onBargeIn={bargeIn} />
     </>,
     document.body,
   )
