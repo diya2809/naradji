@@ -31,15 +31,17 @@ export function catalogFromSellerCsv(): LeanProduct[] {
 
 /**
  * Sync catalog for tests / offline paths.
- * Safe empty array when CSV is missing on Vercel — Payload is authoritative.
+ * loadSellerCatalog never throws — empty array if CSV missing on Vercel.
  */
-export const FALLBACK_CATALOG: LeanProduct[] = (() => {
+export function getFallbackCatalog(): LeanProduct[] {
   try {
     return catalogFromSellerCsv()
   } catch {
     return []
   }
-})()
+}
+
+export const FALLBACK_CATALOG: LeanProduct[] = getFallbackCatalog()
 
 function normalizeAliases(aliases: unknown): string[] {
   if (!Array.isArray(aliases)) return []
@@ -131,9 +133,9 @@ async function loadFromPayload(): Promise<LeanProduct[] | null> {
 /** Load catalog once per request. Payload (CSV-seeded) is authoritative. */
 export const getCatalog = cache(async (): Promise<LeanProduct[]> => {
   const fromDb = await loadFromPayload()
-  return fromDb ?? FALLBACK_CATALOG
+  return fromDb ?? getFallbackCatalog()
 })
 
 export function getCatalogSync(): LeanProduct[] {
-  return FALLBACK_CATALOG
+  return getFallbackCatalog()
 }
