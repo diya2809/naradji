@@ -9,11 +9,7 @@ import type { LeanProduct } from '@/lib/naradji/catalog'
 import { emptyPrefill, emptyUISpec, type UISpec } from '@/lib/naradji/uispec'
 import { isConfirmTranscript } from '@/lib/naradji/confirm'
 import { DEMO_BREATH_TRANSCRIPT } from '@/lib/naradji/demoBreath'
-import {
-  GREETING_LINE,
-  buildReadbackLine,
-  resolveCartLines,
-} from '@/lib/naradji/voiceCopy'
+import { buildReadbackLine, resolveCartLines } from '@/lib/naradji/voiceCopy'
 import { applyCartOp } from '@/lib/naradji/cartIntent'
 import { syncVoiceCartOp, voiceCartFromStoreLines } from '@/lib/naradji/syncVoiceToCart'
 import { shippingToAddressPayload } from '@/lib/naradji/saveVoiceAddress'
@@ -22,6 +18,23 @@ import { MicPill } from './MicPill'
 /** When STT empty or catalog miss — ask, don't invent UI. */
 const CLARIFY_LINE =
   'Narayan Narayan. Samajh nahi aaya. Dobara boliye — doodh, atta, chai… ya poochhiye kaun sasta.'
+
+/** Browser speech fallback when Sarvam TTS is unavailable — keeps demo audible. */
+function playBrowserSpeech(text: string, language: string): Promise<void> {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return Promise.resolve()
+  return new Promise((resolve) => {
+    try {
+      window.speechSynthesis.cancel()
+      const u = new SpeechSynthesisUtterance(text)
+      u.lang = language === 'gu' ? 'gu-IN' : language === 'en' ? 'en-IN' : 'hi-IN'
+      u.onend = () => resolve()
+      u.onerror = () => resolve()
+      window.speechSynthesis.speak(u)
+    } catch {
+      resolve()
+    }
+  })
+}
 
 async function playTts(text: string, language: string, abort: AbortController) {
   let objectUrl: string | null = null
@@ -33,7 +46,12 @@ async function playTts(text: string, language: string, abort: AbortController) {
       body: JSON.stringify({ text, language }),
       signal: abort.signal,
     })
-    if (!res.ok || res.status === 204 || abort.signal.aborted) return
+    if (abort.signal.aborted) return
+    // No key / TTS error → still speak via browser so demo never goes silent.
+    if (!res.ok || res.status === 204) {
+      await playBrowserSpeech(text, language)
+      return
+    }
     const blob = await res.blob()
     if (abort.signal.aborted) return
     objectUrl = URL.createObjectURL(blob)
@@ -62,7 +80,7 @@ async function playTts(text: string, language: string, abort: AbortController) {
       void audio!.play().then(undefined, () => done())
     })
   } catch {
-    // TTS never blocks platform UI (including abort)
+    if (!abort.signal.aborted) await playBrowserSpeech(text, language)
   } finally {
     if (objectUrl) URL.revokeObjectURL(objectUrl)
   }
@@ -107,10 +125,8 @@ export function NaradjiVoiceLayer() {
   const setCartSyncSkipped = useNaradjiStore((s) => s.setCartSyncSkipped)
 
   const ttsAbort = useRef<AbortController | null>(null)
-  /** Bumps when user barges in — stale speak/interpret results are ignored. */
+  /** Bumps when user barges in — aborts TTS only; cart mutations still finish. */
   const turnEpoch = useRef(0)
-  /** Serialize cart mutations so barge-in / rapid turns cannot race Payload. */
-  const cartQueue = useRef(Promise.resolve())
   const typedRef = useRef<HTMLInputElement>(null)
   const greetedRef = useRef(false)
   const [catalogError, setCatalogError] = useState(false)
@@ -324,44 +340,33 @@ export function NaradjiVoiceLayer() {
         }
 
         if (!stillCurrent()) return
-        if (!catalog.some((p) => p.productId)) {
-          if (stillCurrent()) await say('Catalog ready nahi hai. Thodi der baad try kariye.')
-          return
-        }
 
         const cartNow = liveCart
         const storeLines = storeLinesNow
         const mergedItems = applyCartOp(cartNow, uttered, cartOp)
 
-        // Serialize + commit session only after Payload sync succeeds.
-        const syncResult = await new Promise<{
-          skipped: string[]
-          removed: number
-          synced: number
-        }>((resolve, reject) => {
-          cartQueue.current = cartQueue.current
-            .then(async () => {
-              if (!stillCurrent()) {
-                resolve({ skipped: [], removed: 0, synced: 0 })
-                return
-              }
-              const result = await syncVoiceCartOp({
-                op: cartOp,
-                items: uttered,
-                desiredCart: mergedItems,
-                catalog,
-                cartLines: storeLines,
-                addItem,
-                removeItem,
-                clearCart,
-              })
-              resolve(result)
-            })
-            .catch(reject)
-        })
+        // Direct sync — once started, always finish (don't drop cart on barge-in).
+        let skipped: string[] = []
+        let removed = 0
+        try {
+          const result = await syncVoiceCartOp({
+            op: cartOp,
+            items: uttered,
+            desiredCart: mergedItems,
+            catalog,
+            cartLines: storeLines,
+            addItem,
+            removeItem,
+            clearCart,
+          })
+          skipped = result.skipped
+          removed = result.removed
+        } catch {
+          setStatusLine('Cart update fail — dobara try kariye.')
+          await say('Cart update nahi hua. Dobara boliye.', next.language)
+          return
+        }
 
-        if (!stillCurrent()) return
-        const { skipped, removed } = syncResult
         setCartSyncSkipped(skipped)
         setCartItems(mergedItems)
         setUISpec({
@@ -374,26 +379,23 @@ export function NaradjiVoiceLayer() {
 
         if (cartOp === 'clear') {
           go('/cart')
-          if (stillCurrent()) await say(next.naradji_line || 'Cart khali kar diya.', next.language)
+          await say(next.naradji_line || 'Cart khali kar diya.', next.language)
           return
         }
 
         if (cartOp === 'remove') {
           go('/cart')
-          if (stillCurrent()) {
-            await say(
-              removed > 0
-                ? next.naradji_line || 'Cart se hata diya.'
-                : 'Yeh item cart mein nahi mila.',
-              next.language,
-            )
-          }
+          await say(
+            removed > 0
+              ? next.naradji_line || 'Cart se hata diya.'
+              : 'Yeh item cart mein nahi mila.',
+            next.language,
+          )
           return
         }
 
         const lines = resolveCartLines({ ...next, items: mergedItems }, catalog)
         if (!lines.length || (cartOp === 'add' && skipped.length === uttered.length)) {
-          // Roll session back to Payload mirror — sync did not land purchasable lines.
           setCartItems(cartNow)
           await say(
             'Narayan Narayan. Yeh item catalog mein nahi mila. Koi aur naam boliye — doodh, atta, chai…',
@@ -403,7 +405,7 @@ export function NaradjiVoiceLayer() {
 
         go('/cart')
         const readback = buildReadbackLine(lines, { askConfirm: false })
-        if (stillCurrent()) await say(`${readback} Cart khol diya.`, next.language)
+        await say(`${readback} Cart khol diya.`, next.language)
       } catch {
         if (stillCurrent()) await clarify()
       }
@@ -435,8 +437,17 @@ export function NaradjiVoiceLayer() {
   // Portal to body so Naradji sits above Vaul/Radix overlays (own stacking root).
   return createPortal(
     <>
+      {/* Always show status so demo never looks silent even if TTS fails. */}
+      {statusLine ? (
+        <div className="pointer-events-none fixed bottom-[calc(var(--site-bottom-nav-offset)+5.5rem)] left-1/2 z-[9999] w-[min(92vw,28rem)] -translate-x-1/2 md:bottom-32">
+          <p className="rounded-2xl bg-stone-900/90 px-4 py-2 text-center text-sm text-stone-50 shadow-lg">
+            {statusLine}
+          </p>
+        </div>
+      ) : null}
+
       {demo ? (
-        <div className="pointer-events-none fixed bottom-[calc(var(--site-bottom-nav-offset)+5.5rem)] right-4 z-[9999] flex max-w-sm flex-col items-end gap-2 md:bottom-32">
+        <div className="pointer-events-none fixed bottom-[calc(var(--site-bottom-nav-offset)+8.5rem)] right-4 z-[9999] flex max-w-sm flex-col items-end gap-2 md:bottom-44">
           <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
             <button
               type="button"
@@ -451,32 +462,16 @@ export function NaradjiVoiceLayer() {
             <button
               type="button"
               className="rounded-full bg-white px-3 py-1.5 text-xs text-stone-800 shadow-lg ring-1 ring-stone-200"
-              onClick={() => void onTranscript('Tata tea aur Red Label mein kaun sasta')}
+              onClick={() => void onTranscript('doodh hata do')}
             >
-              Demo compare
+              Demo remove
             </button>
             <button
               type="button"
               className="rounded-full bg-white px-3 py-1.5 text-xs text-stone-800 shadow-lg ring-1 ring-stone-200"
-              onClick={() =>
-                void onTranscript('Mera address 12 CG Road Ahmedabad 380009 phone 9876543210')
-              }
+              onClick={() => void onTranscript('cart khali karo')}
             >
-              Demo address
-            </button>
-            <button
-              type="button"
-              className="rounded-full bg-white px-3 py-1.5 text-xs text-stone-800 shadow-lg ring-1 ring-stone-200"
-              onClick={() => void onTranscript('haan pakka')}
-            >
-              Demo checkout
-            </button>
-            <button
-              type="button"
-              className="rounded-full bg-white px-3 py-1.5 text-xs text-stone-800 shadow-lg ring-1 ring-stone-200"
-              onClick={() => void speak(GREETING_LINE)}
-            >
-              Greet
+              Demo clear
             </button>
           </div>
           <form
@@ -493,7 +488,7 @@ export function NaradjiVoiceLayer() {
             <input
               ref={typedRef}
               className="min-w-0 flex-1 rounded-full border border-stone-200 bg-white/95 px-3 py-2 text-xs shadow-lg outline-none focus:ring focus:ring-amber-500/30"
-              placeholder="Type — list / compare / address…"
+              placeholder="Type order…"
             />
             <button
               type="submit"
@@ -502,11 +497,6 @@ export function NaradjiVoiceLayer() {
               Send
             </button>
           </form>
-          {statusLine ? (
-            <p className="max-w-sm rounded-2xl bg-stone-900/90 px-3 py-2 text-[11px] text-stone-50 shadow-lg">
-              {statusLine}
-            </p>
-          ) : null}
           {catalogError ? (
             <p className="rounded-full bg-red-50 px-3 py-1 text-[10px] text-red-700 ring-1 ring-red-200">
               Catalog API failed
