@@ -1,18 +1,19 @@
 import type { Field } from 'payload'
 
-/** India delivery fields shared by addresses, orders, and transactions. */
+/** India delivery fields shared by addresses, orders, and transactions.
+ * All optional — demo/voice checkout must accept partial or empty addresses. */
 export const addressFields = (): Field[] => [
   {
     name: 'name',
     type: 'text',
     label: 'Full name',
-    required: true,
+    required: false,
   },
   {
     name: 'phone',
     type: 'text',
     label: 'Phone number',
-    required: true,
+    required: false,
   },
   {
     name: 'alternatePhone',
@@ -24,36 +25,36 @@ export const addressFields = (): Field[] => [
     name: 'addressLine1',
     type: 'text',
     label: 'Flat, house no.',
-    required: true,
+    required: false,
   },
   {
     name: 'addressLine2',
     type: 'text',
     label: 'Apartment, area, sector, village',
-    required: true,
+    required: false,
   },
   {
     name: 'city',
     type: 'text',
     label: 'City',
-    required: true,
+    required: false,
   },
   {
     name: 'state',
     type: 'text',
     label: 'State',
-    required: true,
+    required: false,
   },
   {
     name: 'postalCode',
     type: 'text',
     label: 'Pincode',
-    required: true,
+    required: false,
   },
   {
     name: 'country',
     type: 'text',
     label: 'Country',
-    required: true,
+    required: false,
   },
 ]

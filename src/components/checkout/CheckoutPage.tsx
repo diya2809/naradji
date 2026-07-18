@@ -7,17 +7,11 @@ import { ProductPriceDisplay } from '@/components/ProductPriceDisplay'
 import { getLineItemPricing } from '@/utilities/productPricing'
 import { getProductLineItemImage } from '@/utilities/productLineItemImage'
 import { getShippingCharge } from '@/lib/shippingCharge'
-import {
-  formatAddressContactError,
-  getAddressContactIssues,
-  isAddressReadyForCheckout,
-} from '@/ecommerce/addressForm'
 import { AddressItem } from '@/components/addresses/AddressItem'
 import { CreateAddressModal } from '@/components/addresses/CreateAddressModal'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
-import { LoginForm } from '@/components/forms/LoginForm'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import type { Address } from '@/payload-types'
 import type { VariantOptionEntry } from '@/types/storefront'
@@ -56,22 +50,12 @@ export const CheckoutPage: React.FC = () => {
 
   const cartIsEmpty = !cart || !cart.items || !cart.items.length
 
-  const addressContactIssues = getAddressContactIssues(billingAddress)
-  const addressReady = isAddressReadyForCheckout(billingAddress)
-  const checkoutErrorTitle =
-    addressContactIssues.length > 0 ||
-    Boolean(error && /delivery address|full name|phone number/i.test(error))
-      ? 'Address incomplete'
-      : 'Couldn’t start payment'
+  const checkoutErrorTitle = 'Couldn’t start payment'
 
-  // Prefill default address when saved addresses load (prefer one with name + phone)
+  // Prefill first saved address when loaded (nothing required on the form).
   useEffect(() => {
     if (!billingAddress && addresses?.length) {
-      const ready = addresses.find((address) => isAddressReadyForCheckout(address))
-      const defaultAddress = ready || addresses[0]
-      if (defaultAddress) {
-        setBillingAddress(defaultAddress)
-      }
+      setBillingAddress(addresses[0])
     }
   }, [addresses, billingAddress])
 
@@ -109,24 +93,25 @@ export const CheckoutPage: React.FC = () => {
   const placeCodOrder = useCallback(async () => {
     setError(null)
 
-    if (!billingAddress) {
-      showCheckoutError('Please select a delivery address before placing the order.')
-      return
-    }
-
-    const contactIssues = getAddressContactIssues(billingAddress)
-    if (contactIssues.length > 0) {
-      showCheckoutError(formatAddressContactError(contactIssues))
-      return
+    // No address required — use selected address when present, otherwise proceed empty.
+    const delivery = billingAddress ?? {
+      name: '',
+      phone: '',
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      postalCode: '',
+      country: 'IN',
     }
 
     setProcessingPayment(true)
     try {
       const paymentData = (await initiatePayment('cod', {
         additionalData: {
-          customerEmail: user?.email,
-          billingAddress,
-          shippingAddress: billingAddress,
+          customerEmail: user?.email || 'demo@naradji.local',
+          billingAddress: delivery,
+          shippingAddress: delivery,
         },
       })) as Record<string, unknown>
 
@@ -186,12 +171,7 @@ export const CheckoutPage: React.FC = () => {
               errorData.errors?.map((e) => e.message).filter(Boolean)
             if (nested?.length) {
               const joined = nested.join(' ')
-              if (/name|phone|billingAddress|shippingAddress/i.test(joined)) {
-                errorMessage =
-                  'Please add your full name and phone number to the delivery address, then try again.'
-              } else {
-                errorMessage = joined
-              }
+              errorMessage = joined
             } else if (errorData.message && !errorData.message.startsWith('{')) {
               errorMessage = errorData.message
             }
@@ -236,13 +216,7 @@ export const CheckoutPage: React.FC = () => {
     )
   }
 
-  if (!user) {
-    return (
-      <div className="mx-auto w-full max-w-md pt-1 pb-12 md:max-w-lg">
-        <LoginForm redirectOverride="/checkout" />
-      </div>
-    )
-  }
+  // Guest checkout allowed — login is optional (no access strictness).
 
   return (
     <div className="my-8 grid w-full gap-10 grid-cols-1 md:grid-cols-5">
@@ -265,7 +239,6 @@ export const CheckoutPage: React.FC = () => {
                 <div className="grid gap-4 grid-cols-1">
                   {addresses.map((address) => {
                     const isSelected = billingAddress?.id === address.id
-                    const incomplete = getAddressContactIssues(address).length > 0
                     return (
                       <div
                         key={address.id}
@@ -276,19 +249,12 @@ export const CheckoutPage: React.FC = () => {
                         className={cn(
                           'relative flex max-w-xl cursor-pointer items-center justify-between gap-6 rounded-xl border px-4 py-2.5 transition-all hover:bg-muted/40',
                           isSelected
-                            ? incomplete
-                              ? 'border-destructive ring-1 ring-destructive bg-destructive/[0.03]'
-                              : 'border-primary ring-1 ring-primary bg-primary/[0.02]'
+                            ? 'border-primary ring-1 ring-primary bg-primary/[0.02]'
                             : 'border-border bg-card',
                         )}
                       >
                         <div className="min-w-0 flex-1 space-y-1">
                           <AddressItem address={address} hideActions />
-                          {incomplete ? (
-                            <p className="text-xs text-destructive">
-                              Missing name or phone — edit to complete
-                            </p>
-                          ) : null}
                         </div>
 
                         <div className="flex shrink-0 items-center gap-4" onClick={(e) => e.stopPropagation()}>
@@ -356,34 +322,22 @@ export const CheckoutPage: React.FC = () => {
                 <AlertTitle>{checkoutErrorTitle}</AlertTitle>
                 <AlertDescription>
                   <p>{error}</p>
-                  {addressContactIssues.length > 0 ? (
-                    <p className="mt-2 text-sm">
-                      Tap the pencil icon on your address to add the missing details.
-                    </p>
-                  ) : null}
                 </AlertDescription>
               </Alert>
             ) : null}
 
-            {addresses && addresses.length > 0 && (
-              <div className="mt-8 flex flex-col items-stretch gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-end">
-                {!addressReady && billingAddress ? (
-                  <p className="text-sm text-muted-foreground sm:mr-auto">
-                    Add name and phone to your address to continue.
-                  </p>
-                ) : null}
-                <Button
-                  size="lg"
-                  disabled={!billingAddress || isProcessingPayment}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    void placeCodOrder()
-                  }}
-                >
-                  {isProcessingPayment ? 'Placing order…' : 'Place COD order'}
-                </Button>
-              </div>
-            )}
+            <div className="mt-8 flex flex-col items-stretch gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-end">
+              <Button
+                size="lg"
+                disabled={isProcessingPayment}
+                onClick={(e) => {
+                  e.preventDefault()
+                  void placeCodOrder()
+                }}
+              >
+                {isProcessingPayment ? 'Placing order…' : 'Place COD order'}
+              </Button>
+            </div>
           </CheckoutSection>
       </div>
 

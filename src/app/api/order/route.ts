@@ -48,16 +48,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'no items' }, { status: 400 })
   }
 
+  // Address is optional — resolveShipping fills demo defaults when missing/partial.
   const shipping = uispec.prefill?.shipping
-  if (!hasUsableShipping(shipping)) {
-    return NextResponse.json(
-      {
-        error: 'address_required',
-        message: 'Boliye apna address — phir haan pakka.',
-      },
-      { status: 400 },
-    )
-  }
 
   const catalog = await getCatalog()
   const byId = new Map(catalog.map((p) => [p.id, p]))

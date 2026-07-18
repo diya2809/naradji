@@ -61,16 +61,20 @@ export function toAddressPayload(
   values: AddressFormValues,
 ): Omit<Address, 'id' | 'customer' | 'updatedAt' | 'createdAt'> {
   const alternatePhone = normalizePhone(values.alternatePhone)
+  // Lenient: keep whatever the user typed; empty fields stay empty (nothing compulsory).
+  const pinRaw = (values.postalCode || '').trim()
+  const pinDigits = normalizePincode(pinRaw)
 
   return {
     name: values.name.trim(),
-    phone: normalizePhone(values.phone),
+    phone: normalizePhone(values.phone) || values.phone.trim(),
     ...(alternatePhone ? { alternatePhone } : { alternatePhone: null }),
     addressLine1: values.addressLine1.trim(),
     addressLine2: values.addressLine2.trim(),
     city: values.city.trim(),
     country: DEFAULT_ADDRESS_COUNTRY,
-    postalCode: normalizePincode(values.postalCode),
+    // Prefer digits when present; otherwise keep free-text so partial notes still save.
+    postalCode: pinDigits || pinRaw,
     state: values.state.trim(),
   }
 }
@@ -88,25 +92,9 @@ export function formatAddressSummary(address: AddressInput): string[] {
   ].filter((line): line is string => Boolean(line?.trim()))
 }
 
-/** Missing/invalid contact fields required before checkout payment. */
-export function getAddressContactIssues(address?: AddressInput | null): string[] {
-  const issues: string[] = []
-
-  if (!address?.name?.trim()) {
-    issues.push('full name')
-  }
-
-  if (!address?.phone?.trim()) {
-    issues.push('phone number')
-  } else if (!isValidPhone(address.phone)) {
-    issues.push('a valid 10-digit phone number')
-  }
-
-  if (address?.alternatePhone?.trim() && !isValidPhone(address.alternatePhone)) {
-    issues.push('a valid alternate phone number')
-  }
-
-  return issues
+/** No contact fields are compulsory — always empty (lenient checkout). */
+export function getAddressContactIssues(_address?: AddressInput | null): string[] {
+  return []
 }
 
 export function formatAddressContactError(issues: string[]): string {
@@ -125,6 +113,7 @@ export function formatAddressContactError(issues: string[]): string {
   return `Please add your ${rest}, and ${last} to the delivery address, then try again.`
 }
 
+/** Any selected/saved address is checkout-ready — fields may be partial or empty. */
 export function isAddressReadyForCheckout(address?: AddressInput | null): boolean {
-  return Boolean(address) && getAddressContactIssues(address).length === 0
+  return Boolean(address)
 }

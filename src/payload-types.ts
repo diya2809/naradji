@@ -241,16 +241,16 @@ export interface Order {
         id?: string | null;
       }[]
     | null;
-  shippingAddress: {
-    name: string;
-    phone: string;
+  shippingAddress?: {
+    name?: string | null;
+    phone?: string | null;
     alternatePhone?: string | null;
-    addressLine1: string;
-    addressLine2: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    country: string;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
   };
   customer?: (string | null) | User;
   customerEmail?: string | null;
@@ -1592,16 +1592,16 @@ export interface Transaction {
   cod?: {
     reference?: string | null;
   };
-  billingAddress: {
-    name: string;
-    phone: string;
+  billingAddress?: {
+    name?: string | null;
+    phone?: string | null;
     alternatePhone?: string | null;
-    addressLine1: string;
-    addressLine2: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    country: string;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
   };
   status: 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired' | 'refunded';
   customer?: (string | null) | User;
@@ -1647,14 +1647,14 @@ export interface Cart {
 export interface Address {
   id: string;
   customer?: (string | null) | User;
-  name: string;
-  phone: string;
+  name?: string | null;
+  phone?: string | null;
   alternatePhone?: string | null;
-  addressLine1: string;
-  addressLine2: string;
-  city: string;
-  state: string;
-  postalCode: string;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
   country: 'IN';
   updatedAt: string;
   createdAt: string;

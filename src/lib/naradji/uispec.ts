@@ -64,10 +64,7 @@ export const emptyUISpec = (): UISpec => ({
   patch: false,
 })
 
+/** Lenient: any shipping object counts (partial/empty OK — server fills defaults). */
 export function hasUsableShipping(shipping: ShippingAddress | null | undefined): boolean {
-  if (!shipping) return false
-  const line = (shipping.addressLine1 || '').trim()
-  const phone = (shipping.phone || '').replace(/\D/g, '')
-  const pin = (shipping.postalCode || '').replace(/\D/g, '')
-  return line.length >= 5 && (phone.length >= 10 || pin.length === 6)
+  return Boolean(shipping)
 }
