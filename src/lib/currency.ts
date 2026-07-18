@@ -1,26 +1,18 @@
 /**
- * Store currency: Indian Rupee only.
- * Payload ecommerce stores amounts in minor units (paise when decimals=2).
+ * Single INR money model for the store.
+ * Re-exports the ecommerce config + minor/major helpers used by seed + Naradji.
  */
+export {
+  inrCurrencyConfig as currenciesConfig,
+  INR_DECIMALS,
+  majorToMinor as rupeesToMinor,
+  minorToMajor as minorToRupees,
+  STORE_CURRENCY_CODE,
+} from '@/lib/inrCurrency'
 
 export const INR = {
   code: 'INR' as const,
   decimals: 2,
   label: 'Indian Rupee',
   symbol: '₹',
-}
-
-export const currenciesConfig = {
-  defaultCurrency: 'INR' as const,
-  supportedCurrencies: [INR],
-}
-
-/** Whole rupees → paise (plugin / admin storage). */
-export function rupeesToMinor(rupees: number): number {
-  return Math.round(rupees * 100)
-}
-
-/** Paise → whole rupees for Naradji / speech UI. */
-export function minorToRupees(minor: number): number {
-  return Math.round(minor) / 100
 }
