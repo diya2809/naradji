@@ -8,6 +8,7 @@ import { Gallery } from '@/components/product/Gallery'
 import { ProductDescription } from '@/components/product/ProductDescription'
 import { getProductReviewsData } from '@/components/review/getProductReviewsData'
 import { Button } from '@/components/ui/button'
+import { minorToMajor } from '@/lib/inrCurrency'
 import { getProductListingPrice } from '@/utilities/productPricing'
 import { queryProductBySlug } from '@/utilities/queryProductBySlug'
 import { ChevronLeftIcon } from 'lucide-react'
@@ -116,12 +117,15 @@ export default async function ProductPage({ params }: Args) {
     : (product.inventory ?? 0) > 0
 
   const listingPrice = getProductListingPrice(product)
-  const schemaPrice =
+  // Schema.org expects major units (₹65), not Payload paise (6500).
+  const schemaPriceMinor =
     listingPrice.mode === 'single'
       ? listingPrice.price
       : listingPrice.mode === 'range'
         ? listingPrice.lowestPrice
         : undefined
+  const schemaPrice =
+    typeof schemaPriceMinor === 'number' ? minorToMajor(schemaPriceMinor) : undefined
 
   const productJsonLd = {
     name: product.title,

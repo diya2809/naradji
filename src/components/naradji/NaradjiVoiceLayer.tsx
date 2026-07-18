@@ -244,16 +244,28 @@ export function NaradjiVoiceLayer() {
         return
       }
 
+      // Read live store — avoids stale cartItems when demo chips fire in parallel.
+      const live = useNaradjiStore.getState()
+      const liveCart = live.cartItems
+      const livePrefill = live.uispec.prefill
+      const liveSpec: UISpec = {
+        ...live.uispec,
+        items: liveCart,
+        prefill: livePrefill,
+      }
+
       if (isConfirmTranscript(trimmed)) {
-        const confirmSpec = orderSpec({
+        const confirmSpec: UISpec = {
+          ...liveSpec,
           layout: 'confirm',
+          items: liveCart,
           naradji_line: 'Order place ho raha hai…',
           prefill: {
             ...emptyPrefill(),
-            ...uispec.prefill,
+            ...livePrefill,
             payment: 'cod',
           },
-        })
+        }
         setUISpec(confirmSpec)
         setSessionOpen(true)
         await placeOrder(confirmSpec)
@@ -268,40 +280,49 @@ export function NaradjiVoiceLayer() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             transcript: trimmed,
-            state: orderSpec(),
+            state: liveSpec,
           }),
         })
         const data = (await res.json()) as { uispec: UISpec; mode?: string }
         const next = data.uispec || emptyUISpec()
 
         if (next.layout === 'compare') {
-          startTransition(() => setUISpec(next))
+          startTransition(() =>
+            setUISpec({
+              ...next,
+              // Keep session prefill; compare must not wipe shipping.
+              prefill: mergePrefill(livePrefill, next.prefill),
+            }),
+          )
           await speak(next.naradji_line, next.language)
           return
         }
 
         if (data.mode === 'address' || next.prefill?.shipping) {
-          const merged = orderSpec({
+          const cartNow = useNaradjiStore.getState().cartItems
+          const merged: UISpec = {
             ...next,
-            items: cartItems,
-            prefill: mergePrefill(uispec.prefill, next.prefill),
-            layout: cartItems.length ? 'confirm' : 'express',
-          })
+            items: cartNow,
+            prefill: mergePrefill(livePrefill, next.prefill),
+            layout: cartNow.length ? 'confirm' : 'express',
+          }
           startTransition(() => setUISpec(merged))
           await speak(merged.naradji_line, merged.language)
           return
         }
 
         const uttered = next.items
-        const mergedItems = mergeItems(cartItems, uttered, next.patch)
+        const cartNow = useNaradjiStore.getState().cartItems
+        const mergedItems = mergeItems(cartNow, uttered, next.patch)
         setCartItems(mergedItems)
 
-        const merged = orderSpec({
+        const prefill = mergePrefill(livePrefill, next.prefill)
+        const merged: UISpec = {
           ...next,
           items: mergedItems,
-          prefill: mergePrefill(uispec.prefill, next.prefill),
+          prefill,
           layout: mergedItems.length ? 'express' : next.layout,
-        })
+        }
 
         const lines = resolveCartLines(merged, catalog)
         const readback = buildReadbackLine(lines, { askConfirm: false })
@@ -329,9 +350,7 @@ export function NaradjiVoiceLayer() {
     },
     [
       addItem,
-      cartItems,
       catalog,
-      orderSpec,
       placeOrder,
       setCartItems,
       setCartSyncSkipped,
@@ -339,7 +358,6 @@ export function NaradjiVoiceLayer() {
       setSessionOpen,
       setUISpec,
       speak,
-      uispec.prefill,
     ],
   )
 
