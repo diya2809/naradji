@@ -31,4 +31,13 @@ describe('UISpec', () => {
       }),
     ).toThrow()
   })
+
+  it('requires qty (OpenAI structured-output safe)', () => {
+    expect(() =>
+      UISpecSchema.parse({
+        ...emptyUISpec(),
+        items: [{ id: 'atta', reason: null }],
+      }),
+    ).toThrow()
+  })
 })

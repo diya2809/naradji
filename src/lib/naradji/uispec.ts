@@ -8,7 +8,8 @@ export const UISpecSchema = z.object({
   items: z.array(
     z.object({
       id: z.string(),
-      qty: z.number().default(1),
+      // required (no .default) — OpenAI structured outputs need every property in `required`
+      qty: z.number(),
       reason: z.string().nullable(),
     }),
   ),
@@ -20,7 +21,7 @@ export const UISpecSchema = z.object({
       color: z.string().nullable(),
     })
     .nullable(),
-  patch: z.boolean().default(false),
+  patch: z.boolean(),
 })
 
 export type UISpec = z.infer<typeof UISpecSchema>
