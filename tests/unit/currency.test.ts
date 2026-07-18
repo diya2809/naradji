@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { currenciesConfig, INR, minorToRupees, rupeesToMinor } from '../../src/lib/currency'
-import { formatInrAmount, inrCurrencyConfig } from '../../src/lib/inrCurrency'
+import { formatInrAmount, inrCurrencyConfig, minorToMajor } from '../../src/lib/inrCurrency'
 
 describe('currency INR', () => {
   it('uses one config for plugin + helpers (decimals=2 / paise)', () => {
@@ -25,5 +25,10 @@ describe('currency INR', () => {
   it('formats storefront amounts from paise, not raw minor as rupees', () => {
     expect(formatInrAmount(6500)).toBe('₹65')
     expect(formatInrAmount(2800)).toBe('₹28')
+  })
+
+  it('exposes major units for Schema.org offers (not raw paise)', () => {
+    expect(minorToMajor(6500)).toBe(65)
+    expect(minorToMajor(2800)).toBe(28)
   })
 })
