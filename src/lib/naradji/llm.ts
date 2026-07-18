@@ -63,7 +63,6 @@ function mergeAliasFirst(
     prefill: {
       ...emptyPrefill(),
       payment,
-      shipping: null,
     },
   }
 }

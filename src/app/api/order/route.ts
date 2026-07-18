@@ -2,31 +2,16 @@ import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { getCatalog } from '@/lib/naradji/catalog'
-import { UISpecSchema, hasUsableShipping, type ShippingAddress } from '@/lib/naradji/uispec'
+import { UISpecSchema } from '@/lib/naradji/uispec'
 import { rupeesToMinor } from '@/lib/currency'
 
 export const dynamic = 'force-dynamic'
 
-function resolveShipping(
-  fromSpec: ShippingAddress | null | undefined,
-  body: { phone?: string; email?: string } | null,
-): ShippingAddress {
-  if (fromSpec && hasUsableShipping(fromSpec)) {
-    return {
-      name: fromSpec.name || 'Voice customer',
-      phone: fromSpec.phone || body?.phone || '0000000000',
-      addressLine1: fromSpec.addressLine1 || 'Voice address',
-      // Payload shipping requires apartment/area — never send null.
-      addressLine2: fromSpec.addressLine2?.trim() || 'Voice order',
-      city: fromSpec.city || 'Ahmedabad',
-      state: fromSpec.state || 'GJ',
-      postalCode: fromSpec.postalCode || '380001',
-      country: fromSpec.country || 'IN',
-    }
-  }
+/** Payload requires shipping fields; keep these internal and never ask in the voice demo. */
+function demoFulfillmentAddress(phone?: string) {
   return {
     name: 'Naradji Demo',
-    phone: body?.phone || '0000000000',
+    phone: phone || '0000000000',
     addressLine1: 'COD — address on call',
     addressLine2: 'Voice order',
     city: 'Ahmedabad',
@@ -48,9 +33,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'no items' }, { status: 400 })
   }
 
-  // Address is optional — resolveShipping fills demo defaults when missing/partial.
-  const shipping = uispec.prefill?.shipping
-
   const catalog = await getCatalog()
   const byId = new Map(catalog.map((p) => [p.id, p]))
   const lines = uispec.items
@@ -71,7 +53,7 @@ export async function POST(req: Request) {
 
   const amountRupees = lines.reduce((s, l) => s + l.lineTotal, 0)
   const amount = rupeesToMinor(amountRupees)
-  const ship = resolveShipping(shipping, body)
+  const ship = demoFulfillmentAddress(body?.phone)
 
   try {
     const payload = await getPayload({ config })
@@ -117,7 +99,6 @@ export async function POST(req: Request) {
       amount: amountRupees,
       currency: 'INR',
       payment: 'cod',
-      shipping: ship,
       items: lines.map((l) => ({
         id: l.product.id,
         title: l.product.title,
@@ -127,21 +108,9 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     console.error('[order]', err)
-    const fakeId = `local-${Date.now()}`
-    return NextResponse.json({
-      orderId: fakeId,
-      amount: amountRupees,
-      currency: 'INR',
-      payment: 'cod',
-      mode: 'local-fallback',
-      shipping: ship,
-      items: lines.map((l) => ({
-        id: l.product.id,
-        title: l.product.title,
-        qty: l.quantity,
-        price: l.product.price,
-      })),
-      warning: err instanceof Error ? err.message : 'order create failed',
-    })
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'order create failed' },
+      { status: 500 },
+    )
   }
 }

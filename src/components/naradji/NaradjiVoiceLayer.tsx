@@ -10,11 +10,16 @@ import { emptyPrefill, emptyUISpec, type UISpec } from '@/lib/naradji/uispec'
 import { applyCartOp } from '@/lib/naradji/cartIntent'
 import { addVoiceItemsToCart, voiceCartFromStoreLines } from '@/lib/naradji/syncVoiceToCart'
 import { buildReadbackLine, resolveCartLines } from '@/lib/naradji/voiceCopy'
+import { isPlaceOrderTranscript } from '@/lib/naradji/orderIntent'
 import { MicPill } from './MicPill'
 
 /** When STT empty or catalog miss — ask, don't invent UI. */
 const CLARIFY_LINE =
   'Narayan Narayan. Samajh nahi aaya. Dobara boliye — doodh, atta, chai…'
+
+function withNarayan(text: string): string {
+  return /^narayan narayan\b/i.test(text.trim()) ? text : `Narayan Narayan. ${text}`
+}
 
 /** Always-audible path — survives lost user-gesture after STT/interpret awaits. */
 function playBrowserSpeech(text: string, language: string): Promise<void> {
@@ -105,6 +110,7 @@ export function NaradjiVoiceLayer() {
   const setMicState = useNaradjiStore((s) => s.setMicState)
   const setTranscript = useNaradjiStore((s) => s.setTranscript)
   const setCartSyncSkipped = useNaradjiStore((s) => s.setCartSyncSkipped)
+  const setLastOrderId = useNaradjiStore((s) => s.setLastOrderId)
 
   const ttsAbort = useRef<AbortController | null>(null)
   /** Bumps when user barges in — aborts TTS only; cart add still finishes. */
@@ -190,7 +196,8 @@ export function NaradjiVoiceLayer() {
     async (text: string) => {
       const epoch = turnEpoch.current
       const stillCurrent = () => turnEpoch.current === epoch
-      const say = (line: string, language = 'hinglish') => speak(line, language, epoch)
+      const say = (line: string, language = 'hinglish') =>
+        speak(withNarayan(line), language, epoch)
 
       const trimmed = text.trim()
       if (!trimmed) {
@@ -229,6 +236,31 @@ export function NaradjiVoiceLayer() {
               : line.product,
         }))
         const cartNow = voiceCartFromStoreLines(storeLinesNow, liveCatalog)
+
+        if (isPlaceOrderTranscript(trimmed)) {
+          if (!cartNow.length) {
+            await say('Cart khali hai. Pehle doodh, atta ya chai boliye.')
+            return
+          }
+
+          const orderSpec: UISpec = {
+            ...emptyUISpec(),
+            items: cartNow,
+            prefill: { ...emptyPrefill(), payment: 'cod' },
+          }
+          const orderRes = await fetch('/api/order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uispec: orderSpec }),
+          })
+          const order = (await orderRes.json()) as { orderId?: string; error?: string }
+          if (!orderRes.ok || !order.orderId) {
+            throw new Error(order.error || 'order create failed')
+          }
+          setLastOrderId(order.orderId)
+          await say('Order place ho gaya. Cash on delivery.')
+          return
+        }
 
         const res = await fetch('/api/interpret', {
           method: 'POST',
@@ -297,6 +329,7 @@ export function NaradjiVoiceLayer() {
       setCartItems,
       setCartSyncSkipped,
       setCatalog,
+      setLastOrderId,
       setMicState,
       setUISpec,
       speak,
@@ -345,6 +378,17 @@ export function NaradjiVoiceLayer() {
               }}
             >
               Demo grocery
+            </button>
+            <button
+              type="button"
+              className="rounded-full bg-amber-700 px-3 py-1.5 text-xs text-white shadow-lg"
+              onClick={() => {
+                const t = 'place order'
+                setTranscript(t)
+                void onTranscript(t)
+              }}
+            >
+              Place order
             </button>
           </div>
           <form

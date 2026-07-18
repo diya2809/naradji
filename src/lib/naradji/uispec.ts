@@ -3,29 +3,12 @@ import { z } from 'zod'
 /** How the utterance mutates the cart. Representation for applyCartOp / sync. */
 export const CartOpSchema = z.enum(['add', 'remove', 'replace', 'clear'])
 
-/** Spoken / COD shipping — nullable fields for OpenAI structured-output safety. */
-export const ShippingSchema = z
-  .object({
-    name: z.string().nullable(),
-    phone: z.string().nullable(),
-    addressLine1: z.string().nullable(),
-    addressLine2: z.string().nullable(),
-    city: z.string().nullable(),
-    state: z.string().nullable(),
-    postalCode: z.string().nullable(),
-    country: z.string().nullable(),
-  })
-  .nullable()
-
-export type ShippingAddress = NonNullable<z.infer<typeof ShippingSchema>>
-
 export const PrefillSchema = z
   .object({
     payment: z.enum(['cod']).nullable(),
     address_id: z.string().nullable(),
     size: z.string().nullable(),
     color: z.string().nullable(),
-    shipping: ShippingSchema,
   })
   .nullable()
 
@@ -62,7 +45,6 @@ export function emptyPrefill(): NonNullable<UISpec['prefill']> {
     address_id: null,
     size: null,
     color: null,
-    shipping: null,
   }
 }
 
@@ -74,13 +56,3 @@ export const emptyUISpec = (): UISpec => ({
   prefill: emptyPrefill(),
   cartOp: 'add',
 })
-
-/** True when spoken shipping has the fields needed to save (no invented defaults). */
-export function hasUsableShipping(shipping: ShippingAddress | null | undefined): boolean {
-  if (!shipping) return false
-  const phone = (shipping.phone || '').replace(/\D/g, '')
-  const pin = (shipping.postalCode || '').replace(/\D/g, '')
-  const line = (shipping.addressLine1 || '').trim()
-  const city = (shipping.city || '').trim()
-  return phone.length >= 10 && pin.length === 6 && Boolean(line && city)
-}

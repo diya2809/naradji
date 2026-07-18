@@ -32,6 +32,9 @@ export async function POST(req: Request) {
       speaker: 'shubh',
       model: 'bulbul:v3',
     })
+    if (!streamResponse.bytes) {
+      throw new Error('Sarvam TTS returned no audio reader')
+    }
     const bytes = await streamResponse.bytes()
     // Bulbul HTTP stream returns MPEG/MP3 — wrong MIME makes <audio> fail silently.
     const contentType =
