@@ -69,7 +69,7 @@ export function CartModal({ categories = [] }: Props) {
   return (
     <Drawer direction="right" onOpenChange={setOpen} open={open}>
       <DrawerTrigger asChild>
-        <OpenCartButton quantity={totalQuantity} />
+        <OpenCartButton className="hidden md:inline-flex" quantity={totalQuantity} />
       </DrawerTrigger>
 
       <DrawerContent>

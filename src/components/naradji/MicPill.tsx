@@ -138,7 +138,7 @@ export function MicPill({
       : LABEL[micState]
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex flex-col items-center gap-2 px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--site-bottom-nav-offset)+0.75rem)] z-50 flex flex-col items-center gap-2 px-4 md:bottom-6">
       {transcript && sessionOpen ? (
         <div className="pointer-events-none max-w-xl rounded-full bg-stone-900/85 px-4 py-2 text-center text-sm text-stone-50 shadow-lg backdrop-blur">
           {transcript}

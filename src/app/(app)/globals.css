@@ -20,6 +20,10 @@
   --site-header-offset: calc(
     var(--site-header-nav-height) + var(--site-header-announcement-display-height, 0px)
   );
+  --site-bottom-nav-height: 3.5rem;
+  --site-bottom-nav-offset: calc(
+    var(--site-bottom-nav-height) + env(safe-area-inset-bottom, 0px)
+  );
   --hero-min-height: 80svh;
   /* Preset bJy0LSWu (radix-maia / stone) */
   --card: oklch(1 0 0);
@@ -228,6 +232,21 @@
   .site-header-spacer {
     height: var(--site-header-offset);
     transition: height 300ms ease-out;
+  }
+
+  /* Mobile bottom tab bar clearance — desktop has no bottom nav. */
+  .site-bottom-nav-spacer {
+    height: var(--site-bottom-nav-offset);
+  }
+
+  @media (min-width: 768px) {
+    :root {
+      --site-bottom-nav-offset: 0px;
+    }
+
+    .site-bottom-nav-spacer {
+      height: 0;
+    }
   }
 }
 

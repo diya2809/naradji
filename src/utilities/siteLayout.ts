@@ -7,11 +7,13 @@ export const HEADER_SCROLL_THRESHOLD = 30
 export const HEADER_SCROLL_EXPAND_THRESHOLD = 5
 
 export const siteLayoutVars = {
-  /** Fixed header stack — nav + animated announcement slot (MobileMenu top offset). */
+  /** Fixed header stack — nav + animated announcement slot. */
   headerOffset: 'var(--site-header-offset)',
   headerNavHeight: 'var(--site-header-nav-height)',
   headerAnnouncementHeight: 'var(--site-header-announcement-height)',
   announcementDisplayHeight: 'var(--site-header-announcement-display-height)',
+  bottomNavHeight: 'var(--site-bottom-nav-height)',
+  bottomNavOffset: 'var(--site-bottom-nav-offset)',
   heroMinHeight: 'var(--hero-min-height)',
 } as const
 

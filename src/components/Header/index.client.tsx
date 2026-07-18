@@ -12,7 +12,6 @@ import { useAuth } from '@/providers/Auth'
 import { Logo } from '@/components/Logo/Logo'
 import { siteLayoutVars } from '@/utilities/siteLayout'
 
-import { MobileMenu } from './MobileMenu'
 import type { CategoryListItem } from '@/types/storefront'
 import type { Header } from '@/payload-types'
 
@@ -26,6 +25,11 @@ export function HeaderClient({ categories, header }: Props) {
   const menu = header.navItems || []
   const { user: authUser } = useAuth()
   const isLoggedIn = Boolean(authUser?.id)
+  const accountHref = isLoggedIn
+    ? '/account'
+    : pathname.startsWith('/login') || pathname.startsWith('/create-account')
+      ? '/login'
+      : `/login?redirect=${encodeURIComponent(pathname)}`
 
   return (
     <div className="fixed inset-x-0 top-0 z-40 bg-background">
@@ -34,15 +38,9 @@ export function HeaderClient({ categories, header }: Props) {
           className="container relative flex items-center justify-between md:justify-start"
           style={{ height: siteLayoutVars.headerNavHeight }}
         >
-          <div className="flex flex-1 items-center md:hidden justify-start">
-            <Suspense fallback={null}>
-              <MobileMenu menu={menu} topOffset={siteLayoutVars.headerOffset} />
-            </Suspense>
-          </div>
-
           <Link
             aria-label="Naradji home"
-            className="flex flex-initial max-w-[45%] items-center justify-center md:static md:max-w-none md:translate-x-0 md:ml-0"
+            className="flex flex-initial max-w-[45%] items-center justify-start md:max-w-none"
             href="/"
           >
             <Logo className="h-10 md:h-12 w-auto max-w-full object-contain" />
@@ -62,7 +60,7 @@ export function HeaderClient({ categories, header }: Props) {
             <Button
               asChild
               aria-label="Search products"
-              className="size-11 md:size-9"
+              className="hidden size-9 md:inline-flex"
               size="icon"
               variant="ghost"
             >
@@ -72,12 +70,12 @@ export function HeaderClient({ categories, header }: Props) {
             </Button>
 
             <Button asChild aria-label="Account" className="hidden md:inline-flex" size="icon" variant="ghost">
-              <Link href={isLoggedIn ? '/account' : pathname.startsWith('/login') || pathname.startsWith('/create-account') ? '/login' : `/login?redirect=${encodeURIComponent(pathname)}`}>
+              <Link href={accountHref}>
                 <CircleUserRoundIcon className="h-5 w-5" />
               </Link>
             </Button>
 
-            <Suspense fallback={<OpenCartButton />}>
+            <Suspense fallback={<OpenCartButton className="hidden md:inline-flex" />}>
               <Cart categories={categories} />
             </Suspense>
           </div>

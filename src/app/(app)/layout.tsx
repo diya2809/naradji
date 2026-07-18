@@ -10,6 +10,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Providers } from '@/providers'
 import { InitTheme } from '@/providers/Theme/InitTheme'
 import { NaradjiVoiceLayer } from '@/components/naradji/NaradjiVoiceLayer'
+import { MobileBottomNav } from '@/components/MobileBottomNav'
 import { ensureStartsWith } from '@/utilities/ensureStartsWith'
 import { getServerSideURL } from '@/utilities/getURL'
 import { DEFAULT_OG_IMAGE_PATH } from '@/utilities/defaultOgImage'
@@ -74,7 +75,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <div aria-hidden className="site-header-spacer shrink-0" />
               <div className="flex flex-1 flex-col">{children}</div>
               <Footer />
+              <div aria-hidden className="site-bottom-nav-spacer shrink-0 md:hidden" />
             </main>
+
+            <MobileBottomNav />
 
             <Suspense fallback={null}>
               <NaradjiVoiceLayer />

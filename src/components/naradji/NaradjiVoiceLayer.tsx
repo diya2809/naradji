@@ -375,7 +375,7 @@ export function NaradjiVoiceLayer() {
   return (
     <>
       {demo ? (
-        <div className="pointer-events-none fixed bottom-28 right-4 z-40 flex max-w-sm flex-col items-end gap-2 sm:bottom-32">
+        <div className="pointer-events-none fixed bottom-[calc(var(--site-bottom-nav-offset)+5.5rem)] right-4 z-40 flex max-w-sm flex-col items-end gap-2 md:bottom-32">
           <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
             <button
               type="button"
@@ -453,7 +453,7 @@ export function NaradjiVoiceLayer() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-            className="fixed inset-x-0 bottom-0 z-40 max-h-[70vh] overflow-y-auto rounded-t-3xl bg-[#f7f3ea] px-5 pb-36 pt-4 shadow-[0_-12px_40px_rgba(0,0,0,0.18)] ring-1 ring-stone-200/80 sm:inset-x-auto sm:bottom-28 sm:right-4 sm:max-h-[min(70vh,36rem)] sm:w-[26rem] sm:rounded-3xl sm:pb-5"
+            className="fixed inset-x-0 bottom-[var(--site-bottom-nav-offset)] z-[45] max-h-[70vh] overflow-y-auto rounded-t-3xl bg-[#f7f3ea] px-5 pb-36 pt-4 shadow-[0_-12px_40px_rgba(0,0,0,0.18)] ring-1 ring-stone-200/80 md:inset-x-auto md:bottom-28 md:right-4 md:z-40 md:max-h-[min(70vh,36rem)] md:w-[26rem] md:rounded-3xl md:pb-5"
             aria-label="Naradji voice cart"
           >
             <div className="mb-3 flex items-center justify-between gap-3">
