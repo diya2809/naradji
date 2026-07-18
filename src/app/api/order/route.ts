@@ -16,7 +16,8 @@ function resolveShipping(
       name: fromSpec.name || 'Voice customer',
       phone: fromSpec.phone || body?.phone || '0000000000',
       addressLine1: fromSpec.addressLine1 || 'Voice address',
-      addressLine2: fromSpec.addressLine2,
+      // Payload shipping requires apartment/area — never send null.
+      addressLine2: fromSpec.addressLine2?.trim() || 'Voice order',
       city: fromSpec.city || 'Ahmedabad',
       state: fromSpec.state || 'GJ',
       postalCode: fromSpec.postalCode || '380001',
@@ -110,7 +111,7 @@ export async function POST(req: Request) {
           name: ship.name || 'Voice customer',
           phone: ship.phone || '0000000000',
           addressLine1: ship.addressLine1 || 'Voice address',
-          addressLine2: ship.addressLine2 || undefined,
+          addressLine2: ship.addressLine2 || 'Voice order',
           city: ship.city || 'Ahmedabad',
           state: ship.state || 'GJ',
           postalCode: ship.postalCode || '380001',

@@ -1,7 +1,12 @@
 import type { ShippingAddress } from './uispec'
 
+/** Cues that mark an utterance as address dictation (detection only). */
 const ADDRESS_CUE =
   /\b(address|pata|pataa|ghar|deliver|delivery|bhej|ship|pin\s*code|pincode|postal|phone|mobile|number|nagar|road|society|apartment|flat|block)\b|पता|घर|पिन/i
+
+/** Words to strip from the street line — never remove road/nagar/etc (part of addresses). */
+const STRIP_FROM_LINE =
+  /\b(address|pata|pataa|ghar|deliver|delivery|bhej|ship|pin\s*code|pincode|postal|phone|mobile|number|mera|mere|my|hai|hain|is|please|plz|ji|naam|name)\b|पता|घर|पिन/gi
 
 /** True when utterance looks like an address dictation, not a grocery list. */
 export function looksLikeAddress(transcript: string): boolean {
@@ -50,12 +55,11 @@ export function parseSpokenAddress(transcript: string): ShippingAddress | null {
     }
   }
 
-  // Strip cues / phone / pin for the street line
+  // Strip meta cues / phone / pin for the street line (keep Road, Nagar, etc.)
   let line = text
-    .replace(ADDRESS_CUE, ' ')
+    .replace(STRIP_FROM_LINE, ' ')
     .replace(/(?:\+?91[\s-]*)?[6-9]\d{9}\b/g, ' ')
     .replace(/\b\d{6}\b/g, ' ')
-    .replace(/\b(mera|mere|my|hai|hain|is|please|plz|ji|naam|name)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 
