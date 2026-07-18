@@ -2,9 +2,6 @@ import { NextResponse } from 'next/server'
 import { generateObject } from 'ai'
 import { getCatalog } from '@/lib/naradji/catalog'
 import { matchAliases } from '@/lib/naradji/aliases'
-import { detectCartOp, isBareNegation } from '@/lib/naradji/cartIntent'
-import { looksLikeAddress } from '@/lib/naradji/parseAddress'
-import { looksLikeProductQuery } from '@/lib/naradji/productQuery'
 import {
   finalizeUISpec,
   hasLLMKey,
@@ -17,6 +14,10 @@ import { UISpecSchema, type UISpec } from '@/lib/naradji/uispec'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
+/**
+ * Interpret speech → UISpec.
+ * Demo path: alias match → cartOp add. No remove/clear/address branching here.
+ */
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     transcript?: string
@@ -31,30 +32,22 @@ export async function POST(req: Request) {
 
   const catalog = await getCatalog()
   const state = body.state ?? null
-
   const aliasHits = matchAliases(transcript, catalog)
-  const cartOp = detectCartOp(transcript)
 
-  // Deterministic paths first — never let LLM invent cart SKUs for clear/remove/replace/alias.
-  if (
-    !body.stream &&
-    (looksLikeAddress(transcript) ||
-      looksLikeProductQuery(transcript) ||
-      isBareNegation(transcript) ||
-      cartOp === 'clear' ||
-      cartOp === 'remove' ||
-      cartOp === 'replace' ||
-      aliasHits.length > 0)
-  ) {
+  // Alias hits are deterministic — never wait on LLM for grocery add.
+  if (!body.stream && aliasHits.length > 0) {
     const offline = interpretOffline(transcript, catalog, state)
-    const mode = looksLikeAddress(transcript)
-      ? 'address'
-      : offline.layout === 'compare'
-        ? 'compare'
-        : aliasHits.length > 0
-          ? 'alias'
-          : 'offline'
-    return NextResponse.json({ uispec: offline, mode })
+    return NextResponse.json({ uispec: offline, mode: 'alias' })
+  }
+
+  if (!body.stream) {
+    const offline = interpretOffline(transcript, catalog, state)
+    if (offline.items.length > 0 || offline.layout === 'compare') {
+      return NextResponse.json({
+        uispec: offline,
+        mode: offline.layout === 'compare' ? 'compare' : 'offline',
+      })
+    }
   }
 
   if (!hasLLMKey()) {
@@ -72,7 +65,7 @@ export async function POST(req: Request) {
       model: resolveModel(),
       schema: UISpecSchema,
       system:
-        'You are Naradji. Return UISpec. Mirror language. Short naradji_line. ids from catalog only. layouts: grid|express|confirm|compare. cartOp: add|remove|replace|clear. Remove/hata/nahi chahiye → cartOp remove with items to drop. Clear cart → cartOp clear. Compare/cheaper → compare layout. Address → fill prefill.shipping.',
+        'You are Naradji. Return UISpec for grocery ADD only. Mirror language. Short naradji_line. ids from catalog only. cartOp: add. layout: grid|express.',
       prompt: JSON.stringify({
         transcript,
         catalog: catalog.map(({ id, title, price, unit, aliases }) => ({

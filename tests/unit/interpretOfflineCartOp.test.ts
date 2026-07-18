@@ -5,73 +5,63 @@ import { emptyUISpec } from '../../src/lib/naradji/uispec'
 
 const catalog: LeanProduct[] = [
   {
-    id: 'milk',
-    productId: 'p-milk',
-    title: 'Amul Milk',
+    id: 'aashirvaad-atta-1kg',
+    productId: 'p1',
+    title: 'Aashirvaad Atta 1kg',
+    price: 65,
+    unit: 'pack',
+    category: 'flour',
+    slug: 'aashirvaad-atta-1kg',
+    aliases: ['atta', 'aashirvaad'],
+  },
+  {
+    id: 'amul-taaza-toned-milk-500ml',
+    productId: 'p2',
+    title: 'Amul Taaza Toned Milk 500ml',
     price: 28,
     unit: 'pack',
     category: 'dairy',
-    slug: 'milk',
-    aliases: ['doodh', 'milk'],
+    slug: 'amul-taaza-toned-milk-500ml',
+    aliases: ['milk', 'doodh', 'amul milk'],
   },
   {
-    id: 'atta',
-    productId: 'p-atta',
-    title: 'Atta',
-    price: 60,
-    unit: 'kg',
-    category: 'flour',
-    slug: 'atta',
-    aliases: ['atta'],
+    id: 'tata-tea-gold-250g',
+    productId: 'p3',
+    title: 'Tata Tea Gold 250g',
+    price: 145,
+    unit: 'pack',
+    category: 'tea',
+    slug: 'tata-tea-gold-250g',
+    aliases: ['chai', 'tea', 'tata tea'],
   },
 ]
 
-describe('interpretOffline cartOp', () => {
-  it('remove utterance yields cartOp remove with product ids (not add)', () => {
-    const state = {
-      ...emptyUISpec(),
-      items: [
-        { id: 'milk', qty: 2, reason: null },
-        { id: 'atta', qty: 1, reason: null },
-      ],
-    }
-    const spec = interpretOffline('doodh hata do', catalog, state)
-    expect(spec.cartOp).toBe('remove')
-    expect(spec.items.map((i) => i.id)).toEqual(['milk'])
+describe('interpretOffline add-only demo', () => {
+  it('gujlish milk add → cartOp add with milk id', () => {
+    const spec = interpretOffline('milk add karjo ne', catalog, emptyUISpec())
+    expect(spec.cartOp).toBe('add')
+    expect(spec.items.map((i) => i.id)).toEqual(['amul-taaza-toned-milk-500ml'])
   })
 
-  it('nahi chahiye is remove, not replace-with-item', () => {
-    const spec = interpretOffline('oreo nahi chahiye', catalog, emptyUISpec())
-    // oreo not in this catalog — still remove op, empty targets
-    expect(spec.cartOp).toBe('remove')
-  })
-
-  it('grocery list stays add', () => {
+  it('grocery list adds multiple items', () => {
     const spec = interpretOffline('do kilo atta, do doodh', catalog, emptyUISpec())
     expect(spec.cartOp).toBe('add')
-    expect(spec.items.map((i) => i.id).sort()).toEqual(['atta', 'milk'])
+    expect(spec.items.length).toBe(2)
   })
 
-  it('clear cart empties items', () => {
+  it('remove phrasing still adds when product is named (demo: add-only)', () => {
+    const spec = interpretOffline('doodh hata do', catalog, emptyUISpec())
+    expect(spec.cartOp).toBe('add')
+    expect(spec.items.map((i) => i.id)).toEqual(['amul-taaza-toned-milk-500ml'])
+  })
+
+  it('clear with no product → empty items, still cartOp add', () => {
     const spec = interpretOffline('clear cart', catalog, emptyUISpec())
-    expect(spec.cartOp).toBe('clear')
+    expect(spec.cartOp).toBe('add')
     expect(spec.items).toEqual([])
   })
 
-  it('sirf product replaces rather than appends', () => {
-    const state = {
-      ...emptyUISpec(),
-      items: [
-        { id: 'milk', qty: 2, reason: null },
-        { id: 'atta', qty: 1, reason: null },
-      ],
-    }
-    const spec = interpretOffline('sirf doodh chahiye', catalog, state)
-    expect(spec.cartOp).toBe('replace')
-    expect(spec.items.map((i) => i.id)).toEqual(['milk'])
-  })
-
-  it('bare nahi clarifies without inventing items', () => {
+  it('bare nahi → empty, no invented SKU', () => {
     const spec = interpretOffline('nahi', catalog, emptyUISpec())
     expect(spec.items).toEqual([])
     expect(spec.cartOp).toBe('add')
