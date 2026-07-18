@@ -1,26 +1,26 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { usePathname, useSearchParams } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
-import { useCart } from '@payloadcms/plugin-ecommerce/client/react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useAddresses, useCart } from '@payloadcms/plugin-ecommerce/client/react'
 import { useNaradjiStore } from '@/lib/naradji/store'
 import type { LeanProduct } from '@/lib/naradji/catalog'
-import { emptyPrefill, emptyUISpec, hasUsableShipping, type UISpec } from '@/lib/naradji/uispec'
+import { emptyPrefill, emptyUISpec, type UISpec } from '@/lib/naradji/uispec'
 import { isConfirmTranscript } from '@/lib/naradji/confirm'
 import { DEMO_BREATH_TRANSCRIPT } from '@/lib/naradji/demoBreath'
 import {
+  GREETING_LINE,
   buildReadbackLine,
-  cartTotal,
-  greetingUISpec,
   resolveCartLines,
 } from '@/lib/naradji/voiceCopy'
 import { syncVoiceItemsToStoreCart } from '@/lib/naradji/syncVoiceToCart'
-import { Express } from './archetypes/Express'
-import { Confirm } from './archetypes/Confirm'
-import { Compare } from './archetypes/Compare'
+import { shippingToAddressPayload } from '@/lib/naradji/saveVoiceAddress'
 import { MicPill } from './MicPill'
+
+/** When STT empty or catalog miss — ask, don't invent UI. */
+const CLARIFY_LINE =
+  'Narayan Narayan. Samajh nahi aaya. Dobara boliye — doodh, atta, chai… ya poochhiye kaun sasta.'
 
 async function playTts(text: string, language: string, abort: AbortController) {
   try {
@@ -41,7 +41,7 @@ async function playTts(text: string, language: string, abort: AbortController) {
     })
     URL.revokeObjectURL(url)
   } catch {
-    // TTS never blocks UI
+    // TTS never blocks platform UI
   }
 }
 
@@ -76,38 +76,32 @@ function mergePrefill(prev: UISpec['prefill'], next: UISpec['prefill']): UISpec[
   }
 }
 
+/**
+ * Ambient voice controller over the real storefront.
+ * No morph sheet — cart drawer, addresses API, checkout page.
+ */
 export function NaradjiVoiceLayer() {
   const pathname = usePathname()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const demo = searchParams?.get('demo') === '1'
 
   const { addItem } = useCart()
+  const { createAddress } = useAddresses()
 
   const catalog = useNaradjiStore((s) => s.catalog)
   const setCatalog = useNaradjiStore((s) => s.setCatalog)
-  const uispec = useNaradjiStore((s) => s.uispec)
   const setUISpec = useNaradjiStore((s) => s.setUISpec)
-  const cartItems = useNaradjiStore((s) => s.cartItems)
   const setCartItems = useNaradjiStore((s) => s.setCartItems)
-  const micState = useNaradjiStore((s) => s.micState)
   const setMicState = useNaradjiStore((s) => s.setMicState)
   const setTranscript = useNaradjiStore((s) => s.setTranscript)
-  const sessionOpen = useNaradjiStore((s) => s.sessionOpen)
-  const setSessionOpen = useNaradjiStore((s) => s.setSessionOpen)
-  const lastOrderId = useNaradjiStore((s) => s.lastOrderId)
-  const setLastOrderId = useNaradjiStore((s) => s.setLastOrderId)
-  const cartSyncSkipped = useNaradjiStore((s) => s.cartSyncSkipped)
   const setCartSyncSkipped = useNaradjiStore((s) => s.setCartSyncSkipped)
-  const reset = useNaradjiStore((s) => s.reset)
-  const [, startTransition] = useTransition()
+
   const ttsAbort = useRef<AbortController | null>(null)
   const typedRef = useRef<HTMLInputElement>(null)
+  const greetedRef = useRef(false)
   const [catalogError, setCatalogError] = useState(false)
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const [statusLine, setStatusLine] = useState<string | null>(null)
 
   useEffect(() => {
     if (!shouldMountVoice(pathname)) return
@@ -127,131 +121,45 @@ export function NaradjiVoiceLayer() {
   }, [pathname, setCatalog])
 
   const speak = useCallback(
-    async (text: string, language: string) => {
+    async (text: string, language = 'hinglish') => {
+      setStatusLine(text)
       ttsAbort.current?.abort()
       ttsAbort.current = new AbortController()
       setMicState('speaking')
-      await playTts(text, language, ttsAbort.current)
-      setMicState('idle')
+      try {
+        await playTts(text, language, ttsAbort.current)
+      } finally {
+        setMicState('idle')
+      }
     },
     [setMicState],
   )
 
-  const openSession = useCallback(async () => {
-    const greet = greetingUISpec()
-    setSessionOpen(true)
-    setUISpec(greet)
-    setCartItems([])
-    setMicState('greeting')
-    setLastOrderId(null)
-    setCartSyncSkipped([])
-    await speak(greet.naradji_line, greet.language)
-  }, [
-    setCartItems,
-    setCartSyncSkipped,
-    setLastOrderId,
-    setMicState,
-    setSessionOpen,
-    setUISpec,
-    speak,
-  ])
-
-  const orderSpec = useCallback(
-    (overrides: Partial<UISpec> = {}): UISpec => ({
-      ...uispec,
-      ...overrides,
-      items: overrides.items ?? cartItems,
-      prefill: mergePrefill(uispec.prefill, overrides.prefill ?? null),
-    }),
-    [cartItems, uispec],
-  )
-
-  const askForAddress = useCallback(
-    async (spec: UISpec) => {
-      const line = 'Pehle address boliye — ghar, city, pin, phone. Phir haan pakka.'
-      const next: UISpec = {
-        ...spec,
-        layout: 'confirm',
-        naradji_line: line,
-        prefill: {
-          ...emptyPrefill(),
-          ...spec.prefill,
-          payment: 'cod',
-        },
-      }
-      setUISpec(next)
-      await speak(line, spec.language)
+  const go = useCallback(
+    (path: string) => {
+      const url = demo ? `${path}${path.includes('?') ? '&' : '?'}demo=1` : path
+      router.push(url)
     },
-    [setUISpec, speak],
+    [demo, router],
   )
 
-  const placeOrder = useCallback(
-    async (spec: UISpec) => {
-      if (!spec.items.length) {
-        setUISpec({
-          ...spec,
-          layout: 'express',
-          naradji_line: 'Pehle list boliye — phir haan pakka.',
-        })
-        await speak('Pehle list boliye — phir haan pakka.', spec.language)
-        return
-      }
-      if (!hasUsableShipping(spec.prefill?.shipping)) {
-        await askForAddress(spec)
-        return
-      }
-      setMicState('adding')
-      const res = await fetch('/api/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uispec: { ...spec, layout: 'confirm' } }),
-      })
-      const data = (await res.json()) as {
-        orderId?: string
-        mode?: string
-        error?: string
-        message?: string
-      }
-
-      if (data.error === 'address_required') {
-        await askForAddress(spec)
-        return
-      }
-
-      const real =
-        Boolean(data.orderId) &&
-        data.mode !== 'local-fallback' &&
-        !String(data.orderId).startsWith('local-')
-
-      if (real && data.orderId) {
-        setLastOrderId(data.orderId)
-        const line = `Order pakka — ${data.orderId}. Shukriya!`
-        setUISpec({ ...spec, layout: 'confirm', naradji_line: line })
-        setMicState('idle')
-        await speak(line, spec.language)
-        return
-      }
-
-      const fail =
-        data.mode === 'local-fallback'
-          ? 'Order save nahi hua — dubara try karein ya /checkout.'
-          : data.message || data.error || 'Order fail. Dubara try karein.'
-      setUISpec({ ...spec, layout: 'confirm', naradji_line: fail })
-      setMicState('idle')
-      await speak(fail, spec.language)
-    },
-    [askForAddress, setLastOrderId, setMicState, setUISpec, speak],
-  )
+  const clarify = useCallback(async () => {
+    await speak(CLARIFY_LINE)
+  }, [speak])
 
   const onTranscript = useCallback(
     async (text: string) => {
       const trimmed = text.trim()
       if (!trimmed) {
-        setMicState('idle')
+        await clarify()
         return
       }
 
-      // Read live store — avoids stale cartItems when demo chips fire in parallel.
+      // Soft greeting once per page load (TTS only — no sheet).
+      if (!greetedRef.current) {
+        greetedRef.current = true
+      }
+
       const live = useNaradjiStore.getState()
       const liveCart = live.cartItems
       const livePrefill = live.uispec.prefill
@@ -261,129 +169,135 @@ export function NaradjiVoiceLayer() {
         prefill: livePrefill,
       }
 
+      // COD confirm → real checkout (platform UI), not a morph confirm card.
       if (isConfirmTranscript(trimmed)) {
-        const confirmSpec: UISpec = {
-          ...liveSpec,
-          layout: 'confirm',
-          items: liveCart,
-          naradji_line: 'Order place ho raha hai…',
-          prefill: {
-            ...emptyPrefill(),
-            ...livePrefill,
-            payment: 'cod',
-          },
+        setMicState('adding')
+        if (!liveCart.length) {
+          await speak('Pehle list boliye — phir cart se checkout.')
+          return
         }
-        setUISpec(confirmSpec)
-        setSessionOpen(true)
-        await placeOrder(confirmSpec)
+        go('/cart')
+        go('/checkout')
+        await speak('Checkout khol diya. Wahan confirm kar lijiye.')
         return
       }
 
       setMicState('adding')
-      setSessionOpen(true)
       try {
         const res = await fetch('/api/interpret', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            transcript: trimmed,
-            state: liveSpec,
-          }),
+          body: JSON.stringify({ transcript: trimmed, state: liveSpec }),
         })
         const data = (await res.json()) as { uispec: UISpec; mode?: string }
         const next = data.uispec || emptyUISpec()
 
-        if (next.layout === 'compare') {
-          startTransition(() =>
-            setUISpec({
-              ...next,
-              // Keep session prefill; compare must not wipe shipping.
-              prefill: mergePrefill(livePrefill, next.prefill),
-            }),
-          )
-          await speak(next.naradji_line, next.language)
-          return
-        }
-
-        if (data.mode === 'address' || next.prefill?.shipping) {
-          const cartNow = useNaradjiStore.getState().cartItems
-          const merged: UISpec = {
+        // Compare / Q&A — voice answer only; open cheapest product page when we have an id.
+        if (next.layout === 'compare' || data.mode === 'compare') {
+          setUISpec({
             ...next,
-            items: cartNow,
             prefill: mergePrefill(livePrefill, next.prefill),
-            layout: cartNow.length ? 'confirm' : 'express',
+          })
+          const cheapest = next.items.find((i) => i.reason === 'cheapest') || next.items[0]
+          if (cheapest?.id) {
+            go(`/products/${cheapest.id}`)
           }
-          startTransition(() => setUISpec(merged))
-          await speak(merged.naradji_line, merged.language)
+          await speak(next.naradji_line || CLARIFY_LINE, next.language)
           return
         }
 
-        const uttered = next.items
+        // Address — save via Payload addresses API (lenient demo defaults).
+        if (data.mode === 'address' || next.prefill?.shipping) {
+          const shipping = next.prefill?.shipping
+          if (!shipping) {
+            await clarify()
+            return
+          }
+          const prefill = mergePrefill(livePrefill, next.prefill)
+          setUISpec({
+            ...next,
+            items: useNaradjiStore.getState().cartItems,
+            prefill,
+          })
+          try {
+            const payload = shippingToAddressPayload(shipping)
+            await createAddress(payload)
+            go('/account/addresses')
+            await speak(
+              next.naradji_line ||
+                `Address save ho gaya: ${payload.addressLine1}, ${payload.city}. Checkout pe jaa sakte ho.`,
+              next.language,
+            )
+          } catch {
+            // Guest / auth fail — still acknowledge and send to checkout to fill form.
+            go('/checkout')
+            await speak(
+              'Address note kiya. Checkout pe check kar lijiye — kuch missing ho to wahan bhar dena.',
+              next.language,
+            )
+          }
+          return
+        }
+
+        const uttered = next.items || []
+        if (!uttered.length) {
+          await clarify()
+          return
+        }
+
         const cartNow = useNaradjiStore.getState().cartItems
         const mergedItems = mergeItems(cartNow, uttered, next.patch)
         setCartItems(mergedItems)
-
-        const prefill = mergePrefill(livePrefill, next.prefill)
-        const merged: UISpec = {
+        setUISpec({
           ...next,
           items: mergedItems,
-          prefill,
-          layout: mergedItems.length ? 'express' : next.layout,
-        }
-
-        const lines = resolveCartLines(merged, catalog)
-        const readback = buildReadbackLine(lines, { askConfirm: false })
-        const withAddressHint = hasUsableShipping(merged.prefill?.shipping)
-          ? `${readback} Haan pakka?`
-          : `${readback} Address boliye, phir haan pakka.`
-        const withLine: UISpec = {
-          ...merged,
-          naradji_line: withAddressHint,
+          prefill: mergePrefill(livePrefill, next.prefill),
           layout: 'express',
-        }
+        })
 
         const { skipped } = await syncVoiceItemsToStoreCart(
-          { ...withLine, items: uttered },
+          { ...next, items: uttered },
           catalog,
           addItem,
         )
         setCartSyncSkipped(skipped)
 
-        startTransition(() => setUISpec(withLine))
-        await speak(withAddressHint, withLine.language)
+        const lines = resolveCartLines({ ...next, items: uttered }, catalog)
+        if (!lines.length || skipped.length === uttered.length) {
+          await speak(
+            'Narayan Narayan. Yeh item catalog mein nahi mila. Koi aur naam boliye — doodh, atta, chai…',
+          )
+          return
+        }
+
+        go('/cart')
+        const readback = buildReadbackLine(lines, { askConfirm: false })
+        await speak(`${readback} Cart khol diya.`, next.language)
       } catch {
-        setMicState('idle')
+        await clarify()
       }
     },
     [
       addItem,
       catalog,
-      placeOrder,
+      clarify,
+      createAddress,
+      go,
       setCartItems,
       setCartSyncSkipped,
       setMicState,
-      setSessionOpen,
       setUISpec,
       speak,
     ],
   )
 
-  if (!shouldMountVoice(pathname) || !mounted) return null
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  const cartView: UISpec = { ...uispec, items: cartItems }
-  const lines = resolveCartLines(cartView, catalog)
-  const total = cartTotal(lines)
-  const showCompare = uispec.layout === 'compare'
-  const showConfirm = uispec.layout === 'confirm' && cartItems.length > 0
-  const shipping = uispec.prefill?.shipping
-  const addressOk = hasUsableShipping(shipping)
-  // No cart/close sheet while listening — sticker + speech text only.
-  // Empty greeting also stays sheet-free (text bubble on MicPill).
-  const showSheet =
-    sessionOpen &&
-    micState !== 'listening' &&
-    micState !== 'greeting' &&
-    (lines.length > 0 || showCompare || showConfirm || Boolean(lastOrderId))
+  if (!shouldMountVoice(pathname)) return null
+  if (!mounted) return null
 
   // Portal to body so Naradji sits above Vaul/Radix overlays (own stacking root).
   return createPortal(
@@ -395,21 +309,18 @@ export function NaradjiVoiceLayer() {
               type="button"
               className="rounded-full bg-stone-900 px-3 py-1.5 text-xs text-stone-50 shadow-lg"
               onClick={() => {
-                void (async () => {
-                  if (!sessionOpen) await openSession()
-                  setTranscript(DEMO_BREATH_TRANSCRIPT)
-                  await onTranscript(DEMO_BREATH_TRANSCRIPT)
-                })()
+                setTranscript(DEMO_BREATH_TRANSCRIPT)
+                void onTranscript(DEMO_BREATH_TRANSCRIPT)
               }}
             >
-              Demo grocery breath
+              Demo grocery
             </button>
             <button
               type="button"
               className="rounded-full bg-white px-3 py-1.5 text-xs text-stone-800 shadow-lg ring-1 ring-stone-200"
               onClick={() => void onTranscript('Tata tea aur Red Label mein kaun sasta')}
             >
-              Demo compare tea
+              Demo compare
             </button>
             <button
               type="button"
@@ -425,7 +336,14 @@ export function NaradjiVoiceLayer() {
               className="rounded-full bg-white px-3 py-1.5 text-xs text-stone-800 shadow-lg ring-1 ring-stone-200"
               onClick={() => void onTranscript('haan pakka')}
             >
-              Confirm · haan pakka
+              Demo checkout
+            </button>
+            <button
+              type="button"
+              className="rounded-full bg-white px-3 py-1.5 text-xs text-stone-800 shadow-lg ring-1 ring-stone-200"
+              onClick={() => void speak(GREETING_LINE)}
+            >
+              Greet
             </button>
           </div>
           <form
@@ -442,7 +360,7 @@ export function NaradjiVoiceLayer() {
             <input
               ref={typedRef}
               className="min-w-0 flex-1 rounded-full border border-stone-200 bg-white/95 px-3 py-2 text-xs shadow-lg outline-none focus:ring focus:ring-amber-500/30"
-              placeholder="Type list / compare / address…"
+              placeholder="Type — list / compare / address…"
             />
             <button
               type="submit"
@@ -451,6 +369,11 @@ export function NaradjiVoiceLayer() {
               Send
             </button>
           </form>
+          {statusLine ? (
+            <p className="max-w-sm rounded-2xl bg-stone-900/90 px-3 py-2 text-[11px] text-stone-50 shadow-lg">
+              {statusLine}
+            </p>
+          ) : null}
           {catalogError ? (
             <p className="rounded-full bg-red-50 px-3 py-1 text-[10px] text-red-700 ring-1 ring-red-200">
               Catalog API failed
@@ -459,103 +382,7 @@ export function NaradjiVoiceLayer() {
         </div>
       ) : null}
 
-      <AnimatePresence>
-        {showSheet ? (
-          <motion.aside
-            key="naradji-sheet"
-            initial={{ y: '100%', opacity: 0.8 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: '100%', opacity: 0 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-            className="fixed inset-x-0 bottom-[var(--site-bottom-nav-offset)] z-[45] max-h-[70vh] overflow-y-auto rounded-t-3xl bg-[#f7f3ea] px-5 pb-36 pt-4 shadow-[0_-12px_40px_rgba(0,0,0,0.18)] ring-1 ring-stone-200/80 md:inset-x-auto md:bottom-28 md:right-4 md:z-40 md:max-h-[min(70vh,36rem)] md:w-[26rem] md:rounded-3xl md:pb-5"
-            aria-label="Naradji voice cart"
-          >
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <p className="font-serif text-2xl text-stone-900">Naradji</p>
-                <p className="text-xs text-stone-600">{uispec.naradji_line}</p>
-              </div>
-              <div className="flex items-start gap-2">
-                <div className="rounded-xl bg-white/80 px-3 py-1.5 text-right ring-1 ring-stone-200/60">
-                  <div className="text-[10px] uppercase tracking-wider text-stone-500">
-                    {showCompare ? 'Compare' : 'Cart'}
-                  </div>
-                  <div className="text-base font-semibold tabular-nums text-stone-900">
-                    ₹{total}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="rounded-full bg-white px-2.5 py-1 text-xs text-stone-600 ring-1 ring-stone-200"
-                  onClick={() => {
-                    ttsAbort.current?.abort()
-                    reset()
-                  }}
-                  aria-label="Close Naradji"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-
-            {cartSyncSkipped.length > 0 ? (
-              <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-900 ring-1 ring-amber-200">
-                Store cart needs seeded products (run seed). Voice list still shown.
-              </p>
-            ) : null}
-
-            {addressOk && shipping ? (
-              <p className="mb-2 rounded-lg bg-white/70 px-3 py-2 text-[11px] text-stone-700 ring-1 ring-stone-200">
-                Deliver: {shipping.addressLine1}
-                {shipping.city ? `, ${shipping.city}` : ''}
-                {shipping.postalCode ? ` ${shipping.postalCode}` : ''}
-                {shipping.phone ? ` · ${shipping.phone}` : ''}
-              </p>
-            ) : null}
-
-            {showCompare ? <Compare uispec={uispec} catalog={catalog} /> : null}
-            {!showCompare && !showConfirm && lines.length > 0 ? (
-              <Express uispec={cartView} catalog={catalog} />
-            ) : null}
-            {!showCompare && !showConfirm && lines.length === 0 ? (
-              <p className="py-6 text-center text-sm text-stone-500">
-                List boliye, ya poochhiye — “Tata tea aur Red Label mein kaun sasta?”
-              </p>
-            ) : null}
-            {showConfirm ? (
-              <Confirm
-                uispec={cartView}
-                catalog={catalog}
-                orderId={lastOrderId}
-                onConfirm={() => void placeOrder(orderSpec({ layout: 'confirm' }))}
-              />
-            ) : null}
-
-            {!showCompare && lines.length > 0 && !showConfirm && !lastOrderId ? (
-              <button
-                type="button"
-                className="mt-4 w-full rounded-2xl bg-stone-900 py-3 text-sm font-medium text-stone-50"
-                onClick={() =>
-                  void placeOrder(
-                    orderSpec({
-                      layout: 'confirm',
-                      prefill: {
-                        ...emptyPrefill(),
-                        ...uispec.prefill,
-                        payment: 'cod',
-                      },
-                    }),
-                  )
-                }
-              >
-                {addressOk ? 'Confirm · haan pakka' : 'Address chahiye · phir confirm'}
-              </button>
-            ) : null}
-          </motion.aside>
-        ) : null}
-      </AnimatePresence>
-
-      <MicPill demo={demo} onOpenSession={openSession} onTranscript={onTranscript} />
+      <MicPill demo={demo} onTranscript={onTranscript} />
     </>,
     document.body,
   )
