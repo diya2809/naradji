@@ -5,7 +5,7 @@ export const homeStaticData: () => RequiredDataFromCollectionSlug<'pages'> = () 
     slug: 'home',
     _status: 'published',
     hero: {
-      type: 'lowImpact',
+      type: 'none',
       richText: {
         root: {
           type: 'root',

@@ -6,35 +6,29 @@ import { richText } from './richtext'
 type HomePageArgs = {
   carouselImages: Media[]
   featuredProductIds: [string, string, string]
-  heroImage: Media
-  metaImage: Media
-  mobileHeroImage: Media
+  metaImage?: Media | null
 }
 
 export const homePageData: (args: HomePageArgs) => RequiredDataFromCollectionSlug<'pages'> = ({
   carouselImages,
   featuredProductIds,
-  heroImage,
   metaImage,
-  mobileHeroImage,
 }) => {
   const [cardOne, cardTwo, cardThree] = carouselImages
+  const fallbackImage = cardOne?.id
 
   return {
     slug: 'home',
     title: 'Home',
     _status: 'published',
     hero: {
-      type: 'highImpact',
-      media: heroImage.id,
-      mobileMedia: mobileHeroImage.id,
-      clickLink: {
-        type: 'custom',
-        url: '/shop',
-      },
+      type: 'none',
       links: [],
       richText: null,
-    },
+      // Clear any previously seeded Asmi/fashion hero uploads.
+      media: null,
+      mobileMedia: null,
+    } as any,
     layout: [
       {
         blockType: 'appleCardsCarousel',
@@ -43,23 +37,22 @@ export const homePageData: (args: HomePageArgs) => RequiredDataFromCollectionSlu
           {
             category: 'Dairy',
             title: 'Fresh milk & more',
-            image: cardOne?.id ?? heroImage.id,
-            mobileImage: mobileHeroImage.id,
+            image: cardOne?.id ?? fallbackImage,
           },
           {
             category: 'Atta & grains',
             title: 'Daily cooking essentials',
-            image: cardTwo?.id ?? heroImage.id,
+            image: cardTwo?.id ?? fallbackImage,
           },
           {
             category: 'Tea & coffee',
             title: 'Chai time favourites',
-            image: cardThree?.id ?? heroImage.id,
+            image: cardThree?.id ?? fallbackImage,
           },
           {
             category: 'Snacks',
             title: 'Quick munchies',
-            image: cardOne?.id ?? heroImage.id,
+            image: cardOne?.id ?? fallbackImage,
           },
         ],
       },
@@ -128,7 +121,7 @@ export const homePageData: (args: HomePageArgs) => RequiredDataFromCollectionSlu
     meta: {
       title: 'Naradji — voice grocery',
       description: 'Speak your kirana list. Order with COD. Haan pakka.',
-      image: metaImage,
+      ...(metaImage ? { image: metaImage.id } : {}),
     },
   }
 }

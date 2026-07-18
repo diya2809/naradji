@@ -1,14 +1,9 @@
 import type { CollectionSlug, Payload, PayloadRequest, File, RequiredDataFromCollectionSlug } from 'payload'
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { contactFormData } from './contact-form'
 import { contactPageData } from './contact-page'
 import { footerSeedPages } from './footer-pages'
 import { homePageData } from './home'
-import { imageHero1Data } from './image-hero-1'
-import { imageMobileHeroData } from './image-mobile-hero'
 import { seedSellerCatalog } from './seller-catalog'
 import { rupeesToMinor } from '@/lib/currency'
 import type { Address, Form, Media, Product, Transaction, Header } from '@/payload-types'
@@ -29,18 +24,42 @@ const collections: CollectionSlug[] = [
   'orders',
 ]
 
-const filename = fileURLToPath(import.meta.url)
-const dirname = path.dirname(filename)
+/** Fashion/Asmi leftovers — never re-seed these. */
+const LEGACY_ASMI_MEDIA_ALTS = ['Naradji hero — desktop', 'Naradji hero — mobile']
+const LEGACY_ASMI_MEDIA_FILENAMES = [
+  'hero-laptop.png',
+  'hero-mobile.png',
+  'hero-laptop-asmi.png',
+  'hero-mobile-asmi.png',
+]
 
-const heroDesktopImageFileName = 'hero-laptop.png'
-const heroMobileImageFileName = 'hero-mobile.png'
+async function purgeLegacyAsmiMedia(payload: Payload, req: PayloadRequest): Promise<void> {
+  const legacy = await payload.find({
+    collection: 'media',
+    depth: 0,
+    limit: 200,
+    overrideAccess: true,
+    pagination: false,
+    req,
+    where: {
+      or: [
+        { alt: { in: LEGACY_ASMI_MEDIA_ALTS } },
+        { filename: { in: LEGACY_ASMI_MEDIA_FILENAMES } },
+        { filename: { contains: 'asmi' } },
+        { alt: { contains: 'Asmi' } },
+        { alt: { contains: 'asmi' } },
+      ],
+    },
+  })
 
-function seedImagePath(fileName: string): string {
-  return path.resolve(dirname, fileName)
-}
-
-async function fetchSeedImage(fileName: string): Promise<File> {
-  return fetchFileFromPath(seedImagePath(fileName))
+  let deleted = 0
+  for (const doc of legacy.docs) {
+    await payload.delete({ collection: 'media', id: doc.id, req })
+    deleted += 1
+  }
+  if (deleted) {
+    payload.logger.info(`— Removed ${deleted} legacy Asmi/fashion media docs`)
+  }
 }
 
 const baseAddressData: Transaction['billingAddress'] = {
@@ -213,12 +232,7 @@ export const seed = async ({
   payload.logger.info(`— Database will not be cleared. Processing updates/inserts...`)
   payload.logger.info(`— Seeding customer and customer data...`)
 
-  payload.logger.info(`— Seeding media...`)
-
-  const [heroBuffer, mobileHeroBuffer] = await Promise.all([
-    fetchSeedImage(heroDesktopImageFileName),
-    fetchSeedImage(heroMobileImageFileName),
-  ])
+  await purgeLegacyAsmiMedia(payload, req)
 
   const customer = await create({
     collection: 'users',
@@ -228,18 +242,6 @@ export const seed = async ({
       password: 'password',
       roles: ['customer'],
     },
-  })
-
-  const imageHero = await create({
-    collection: 'media',
-    data: imageHero1Data,
-    file: heroBuffer,
-  })
-
-  const imageMobileHero = await create({
-    collection: 'media',
-    data: imageMobileHeroData,
-    file: mobileHeroBuffer,
   })
 
   const {
@@ -298,17 +300,19 @@ export const seed = async ({
 
   payload.logger.info(`— Seeding pages (static)...`)
 
+  if (primaryProductImages.length < 1) {
+    throw new Error('Seller catalog seed produced no product images for homepage cards')
+  }
+
   await create({
     collection: 'pages',
     depth: 0,
     data: homePageData({
-      heroImage: imageHero,
-      mobileHeroImage: imageMobileHero,
-      metaImage: imageHero,
+      metaImage: primaryProductImages[0],
       carouselImages: [
-        primaryProductImages[0] ?? imageHero,
-        primaryProductImages[1] ?? imageHero,
-        primaryProductImages[2] ?? imageHero,
+        primaryProductImages[0],
+        primaryProductImages[1] ?? primaryProductImages[0],
+        primaryProductImages[2] ?? primaryProductImages[0],
       ],
       featuredProductIds: [String(productA.id), String(productB.id), String(productC.id)],
     }),
@@ -613,23 +617,4 @@ export const seed = async ({
   }
 
   payload.logger.info('Seeded database successfully!')
-}
-
-async function fetchFileFromPath(filePath: string): Promise<File> {
-  const data = await readFile(filePath)
-  const ext = path.extname(filePath).replace('.', '').toLowerCase()
-  const mimetypeByExtension: Record<string, string> = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    webp: 'image/webp',
-    mp4: 'video/mp4',
-  }
-
-  return {
-    name: path.basename(filePath),
-    data,
-    mimetype: mimetypeByExtension[ext] ?? 'application/octet-stream',
-    size: data.byteLength,
-  }
 }
