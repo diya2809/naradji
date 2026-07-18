@@ -57,12 +57,13 @@ pnpx create-payload-app@latest cursor-ahm \
 - Free `/admin` for the “order appeared” reveal beat.
 - Skill: **payload** (collections, Local API, drafts, access control gotchas).
 
-### 3. Env + hide Stripe (COD only)
-**Status:** done
+### 3. Env + COD voice path (keep template checkout)
+**Status:** done · corrected 2026-07-18
 
-- `.env`: `DATABASE_URL`, `PAYLOAD_SECRET`, later `SARVAM_API_KEY`, `OPENAI_API_KEY`.
-- Redirect `/checkout` → home; leave Stripe packages installed but unused.
-- Payment path = COD only.
+- `.env`: `DATABASE_URL`, `PAYLOAD_SECRET`, `SARVAM_API_KEY`, `OPENAI_API_KEY`.
+- Keep the **full Payload ecommerce UI** (Header, Footer, `/shop`, `/products`, `/checkout`).
+- Voice COD uses `POST /api/order` from the Naradji overlay — Stripe packages stay installed for the template path; demo spine is voice COD.
+- Mistake we fixed: do **not** redirect `/checkout` → home or delete chrome for “demo speed”.
 
 ### 4. Seed 12 grocery SKUs + aliases
 **Status:** done · `pnpm seed:naradji`
@@ -86,12 +87,13 @@ pnpx create-payload-app@latest cursor-ahm \
 - Offline fallback if the LLM key/call fails — demo never dies.
 - Route: `POST /api/interpret`.
 
-### 7. Morphing storefront UI
-**Status:** done
+### 7. Voice layer on top of normal ecommerce (not a replacement homepage)
+**Status:** done · refactored 2026-07-18
 
-- `StoreCanvas` + archetypes `Grid` / `Express` / `Confirm`.
-- Framer Motion `layout` so items glide between layouts.
-- Fixed anchors: brand + cart total; mic pill at bottom.
+- Root layout = Payload shell (`AdminBar` + `Header` + `main` + `Footer`) + `NaradjiVoiceLayer`.
+- Homepage = CMS `PageTemplate` again (not Naradji-only).
+- Overlay: fixed `MicPill` + demo chips + morph sheet (`Express` / `Confirm`) when voice has items.
+- Archetypes stay; they slide over the shop instead of owning the whole viewport.
 - Skill: **vercel-react-best-practices** (no waterfalls on hot path, thin client props).
 
 ### 8. Voice in — Sarvam STT (speech-to-text skill)
@@ -129,9 +131,9 @@ Skip heavy E2E for day one.
 ### 12. Rehearse the demo script
 **Status:** in progress / your turn
 
-1. Open `/` — normal shelf + mic pill.  
-2. “Demo grocery breath” or speak the list.  
-3. Store → express (items + COD).  
+1. Open `/` — **normal ecommerce homepage** (Header/Footer) + ambient mic pill.  
+2. Browse `/shop` if you want — voice still works on top.  
+3. “Demo grocery breath” or speak the list → morph sheet opens (express + COD).  
 4. “haan pakka” → order id → open `/admin`.  
 5. Optional: Gujarati line → mirrored language + TTS.
 
@@ -172,7 +174,9 @@ pnpm test:unit
 ## Hot-path reminder
 
 ```
-mic → /api/stt → alias + /api/interpret → StoreCanvas morph → /api/tts (last)
+[normal Payload shop: Header / pages / shop / cart / checkout]
+                         +
+mic → /api/stt → alias + /api/interpret → NaradjiVoiceLayer sheet → /api/tts (last)
                                                       ↓
                                               haan pakka → /api/order
 ```

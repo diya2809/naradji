@@ -1,40 +1,22 @@
 import type { ReactNode } from 'react'
+import { Suspense } from 'react'
 
+import { AdminBar } from '@/components/AdminBar'
+import { Footer } from '@/components/Footer'
+import { Header } from '@/components/Header'
 import { LivePreviewListener } from '@/components/LivePreviewListener'
 import { Providers } from '@/providers'
 import { InitTheme } from '@/providers/Theme/InitTheme'
+import { NaradjiVoiceLayer } from '@/components/naradji/NaradjiVoiceLayer'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import React from 'react'
 import './globals.css'
 
-/* const { SITE_NAME, TWITTER_CREATOR, TWITTER_SITE } = process.env
-const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-  ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-  : 'http://localhost:3000'
-const twitterCreator = TWITTER_CREATOR ? ensureStartsWith(TWITTER_CREATOR, '@') : undefined
-const twitterSite = TWITTER_SITE ? ensureStartsWith(TWITTER_SITE, 'https://') : undefined
+/**
+ * Full Payload ecommerce shell + Naradji voice layer on top.
+ * Shop/browse/cart work normally; MicPill overlays every storefront page.
  */
-/* export const metadata = {
-  metadataBase: new URL(baseUrl),
-  robots: {
-    follow: true,
-    index: true,
-  },
-  title: {
-    default: SITE_NAME,
-    template: `%s | ${SITE_NAME}`,
-  },
-  ...(twitterCreator &&
-    twitterSite && {
-      twitter: {
-        card: 'summary_large_image',
-        creator: twitterCreator,
-        site: twitterSite,
-      },
-    }),
-} */
-
 export default async function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
@@ -49,10 +31,15 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       </head>
       <body>
         <Providers>
-          {/* No AdminBar on storefront — it auth-gates client-side and causes hydration mismatch.
-              Admin reveal is via /admin link in the store UI. */}
+          <AdminBar />
           <LivePreviewListener />
+          <Header />
           <main>{children}</main>
+          <Footer />
+          {/* Ambient voice — does not replace the storefront */}
+          <Suspense fallback={null}>
+            <NaradjiVoiceLayer />
+          </Suspense>
         </Providers>
       </body>
     </html>

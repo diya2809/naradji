@@ -5,7 +5,7 @@ import type { PayloadAdminBarProps } from '@payloadcms/admin-bar'
 import { cn } from '@/utilities/cn'
 import { useSelectedLayoutSegments } from 'next/navigation'
 import { PayloadAdminBar } from '@payloadcms/admin-bar'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { User } from '@/payload-types'
 
 const collectionLabels = {
@@ -31,6 +31,11 @@ export const AdminBar: React.FC<{
   const { adminBarProps } = props || {}
   const segments = useSelectedLayoutSegments()
   const [show, setShow] = useState(false)
+  // Client-only mount — PayloadAdminBar auth callback differs SSR vs client (hydration).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore - todo fix, not sure why this is erroring
   const collection = collectionLabels?.[segments?.[1]] ? segments?.[1] : 'pages'
@@ -40,6 +45,8 @@ export const AdminBar: React.FC<{
 
     setShow(Boolean(canSeeAdmin))
   }, [])
+
+  if (!mounted) return null
 
   return (
     <div

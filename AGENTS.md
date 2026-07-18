@@ -1,8 +1,10 @@
-# Naradji — Voice Commerce
+# Narad Muni — Voice Commerce
 
-Voice-morphing Indian daily-needs storefront: speak a grocery list in any Indian
-language, the store morphs, COD completes with “haan pakka”. Built at Cursor
-Hackathon Ahmedabad.
+Plug-and-play voice layer for e-commerce: users speak naturally in any Indian
+language and complete orders end-to-end. The platform is a **normal Payload
+ecommerce storefront**; **Naradji** sits on top as an ambient mic + morph sheet
+(not a replacement homepage). COD with “haan pakka”. Built at Cursor Hackathon
+Ahmedabad.
 
 Repo: https://github.com/diya2809/naradji
 
@@ -55,6 +57,7 @@ Write simple parts connected by clean interfaces.
 
 ### Naradji application of these rules
 
+- **Shell + layer** — keep full ecommerce chrome; voice is `NaradjiVoiceLayer` in root layout.
 - **UISpec is the representation** — LLM emits data; UI renders prebuilt archetypes (fold knowledge into data).
 - **Alias map before LLM** — deterministic matching first; model fills gaps only.
 - **Payload off the hot path** — catalog load + order confirm only (separation of mechanism).
