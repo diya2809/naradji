@@ -16,7 +16,7 @@ import { MicPill } from './MicPill'
 const CLARIFY_LINE =
   'Narayan Narayan. Samajh nahi aaya. Dobara boliye — doodh, atta, chai…'
 
-/** Browser speech fallback when Sarvam TTS is unavailable — keeps demo audible. */
+/** Always-audible path — survives lost user-gesture after STT/interpret awaits. */
 function playBrowserSpeech(text: string, language: string): Promise<void> {
   if (typeof window === 'undefined' || !window.speechSynthesis) return Promise.resolve()
   return new Promise((resolve) => {
@@ -33,53 +33,50 @@ function playBrowserSpeech(text: string, language: string): Promise<void> {
   })
 }
 
+/**
+ * Speak for the demo.
+ * Browser speech is primary: mic→STT→interpret awaits drop the user-gesture, so
+ * HTMLAudioElement.play() is often blocked and used to fail silently.
+ * Sarvam TTS is best-effort only.
+ */
 async function playTts(text: string, language: string, abort: AbortController) {
-  let objectUrl: string | null = null
-  let audio: HTMLAudioElement | null = null
-  try {
-    const res = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, language }),
-      signal: abort.signal,
-    })
-    if (abort.signal.aborted) return
-    if (!res.ok || res.status === 204) {
-      await playBrowserSpeech(text, language)
-      return
-    }
-    const blob = await res.blob()
-    if (abort.signal.aborted) return
-    objectUrl = URL.createObjectURL(blob)
-    audio = new Audio(objectUrl)
-    await new Promise<void>((resolve) => {
-      const done = () => {
-        abort.signal.removeEventListener('abort', onAbort)
-        resolve()
-      }
-      const onAbort = () => {
+  if (abort.signal.aborted) return
+
+  // Primary: browser TTS (audible even after async gaps).
+  const browserPromise = playBrowserSpeech(text, language)
+
+  // Best-effort Sarvam — never block / never replace browser speech on failure.
+  void (async () => {
+    let objectUrl: string | null = null
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language }),
+        signal: abort.signal,
+      })
+      if (!res.ok || res.status === 204 || abort.signal.aborted) return
+      const blob = await res.blob()
+      if (abort.signal.aborted || !blob.size) return
+      objectUrl = URL.createObjectURL(blob)
+      const audio = new Audio(objectUrl)
+      // If Sarvam plays, duck browser speech so we don't double-talk.
+      audio.onplaying = () => {
         try {
-          audio?.pause()
-          if (audio) audio.src = ''
+          window.speechSynthesis?.cancel()
         } catch {
           // ignore
         }
-        done()
       }
-      if (abort.signal.aborted) {
-        onAbort()
-        return
-      }
-      abort.signal.addEventListener('abort', onAbort, { once: true })
-      audio!.onended = () => done()
-      audio!.onerror = () => done()
-      void audio!.play().then(undefined, () => done())
-    })
-  } catch {
-    if (!abort.signal.aborted) await playBrowserSpeech(text, language)
-  } finally {
-    if (objectUrl) URL.revokeObjectURL(objectUrl)
-  }
+      await audio.play()
+    } catch {
+      // ignore — browser speech already covering
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  })()
+
+  await browserPromise
 }
 
 function shouldMountVoice(pathname: string | null): boolean {
@@ -201,22 +198,38 @@ export function NaradjiVoiceLayer() {
         return
       }
 
-      const live = useNaradjiStore.getState()
-      const storeLinesNow = (cart?.items ?? []).map((line) => ({
-        id: line.id,
-        quantity: line.quantity,
-        product:
-          typeof line.product === 'object' && line.product
-            ? { id: line.product.id }
-            : line.product,
-      }))
-      const cartNow = voiceCartFromStoreLines(storeLinesNow, catalog)
+      // Keep speech unlocked across the async cart path (mic / Send / Demo).
+      try {
+        window.speechSynthesis?.cancel()
+      } catch {
+        // ignore
+      }
 
       if (!stillCurrent()) return
       setMicState('adding')
       setStatusLine('Cart mein…')
 
       try {
+        // Catalog must be ready — without productId, addItem is a no-op skip.
+        let liveCatalog = catalog
+        if (!liveCatalog.some((p) => p.productId)) {
+          const catRes = await fetch('/api/catalog')
+          const catData = (await catRes.json()) as { catalog?: LeanProduct[] }
+          liveCatalog = catData.catalog ?? []
+          if (liveCatalog.length) setCatalog(liveCatalog)
+        }
+        if (!stillCurrent()) return
+
+        const storeLinesNow = (cart?.items ?? []).map((line) => ({
+          id: line.id,
+          quantity: line.quantity,
+          product:
+            typeof line.product === 'object' && line.product
+              ? { id: line.product.id }
+              : line.product,
+        }))
+        const cartNow = voiceCartFromStoreLines(storeLinesNow, liveCatalog)
+
         const res = await fetch('/api/interpret', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -228,7 +241,7 @@ export function NaradjiVoiceLayer() {
         const next = data.uispec || emptyUISpec()
         const uttered = next.items || []
 
-        // Demo contract: add matched grocery only. Ignore address/compare/remove/clear.
+        // Demo contract: add matched grocery only.
         if (!uttered.length) {
           await say(next.naradji_line || CLARIFY_LINE, next.language)
           return
@@ -238,7 +251,7 @@ export function NaradjiVoiceLayer() {
         try {
           const result = await addVoiceItemsToCart({
             items: uttered,
-            catalog,
+            catalog: liveCatalog,
             addItem,
           })
           skipped = result.skipped
@@ -259,7 +272,7 @@ export function NaradjiVoiceLayer() {
           layout: 'express',
         })
 
-        const lines = resolveCartLines({ ...next, items: mergedItems }, catalog)
+        const lines = resolveCartLines({ ...next, items: mergedItems }, liveCatalog)
         if (!lines.length || skipped.length === uttered.length) {
           setCartItems(cartNow)
           await say(
@@ -268,9 +281,10 @@ export function NaradjiVoiceLayer() {
           return
         }
 
-        go('/cart')
+        // Speak first — navigating away mid-play kills audio on mobile.
         const readback = buildReadbackLine(lines, { askConfirm: false })
         await say(`${readback} Cart khol diya.`, next.language)
+        go('/cart')
       } catch {
         if (stillCurrent()) await say(CLARIFY_LINE)
       }
@@ -282,6 +296,7 @@ export function NaradjiVoiceLayer() {
       go,
       setCartItems,
       setCartSyncSkipped,
+      setCatalog,
       setMicState,
       setUISpec,
       speak,

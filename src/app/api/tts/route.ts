@@ -33,9 +33,20 @@ export async function POST(req: Request) {
       model: 'bulbul:v3',
     })
     const bytes = await streamResponse.bytes()
+    // Bulbul HTTP stream returns MPEG/MP3 — wrong MIME makes <audio> fail silently.
+    const contentType =
+      bytes.length >= 3 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0
+        ? 'audio/mpeg'
+        : bytes.length >= 4 &&
+            bytes[0] === 0x52 &&
+            bytes[1] === 0x49 &&
+            bytes[2] === 0x46 &&
+            bytes[3] === 0x46
+          ? 'audio/wav'
+          : 'audio/mpeg'
     return new NextResponse(Buffer.from(bytes), {
       headers: {
-        'Content-Type': 'audio/wav',
+        'Content-Type': contentType,
         'Cache-Control': 'no-store',
       },
     })

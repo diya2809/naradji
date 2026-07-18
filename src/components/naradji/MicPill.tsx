@@ -73,6 +73,12 @@ export function MicPill({
   async function startListening() {
     // Always cut Naradji off before a new listen.
     onBargeIn()
+    // Unlock speechSynthesis on the user gesture so later (post-STT) speak works.
+    try {
+      window.speechSynthesis?.cancel()
+    } catch {
+      // ignore
+    }
     discardRecording()
     const gen = ++listenGen.current
 
