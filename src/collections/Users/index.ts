@@ -39,6 +39,8 @@ export const Users: CollectionConfig = {
         read: adminOnlyFieldAccess,
         update: adminOnlyFieldAccess,
       },
+      // So /next/seed auth sees roles on the JWT without an extra DB round-trip
+      saveToJWT: true,
       defaultValue: ['customer'],
       hasMany: true,
       hooks: {

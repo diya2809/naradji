@@ -11,13 +11,17 @@ const SuccessMessage: React.FC = () => (
     <a target="_blank" href="/">
       visit your website
     </a>
+    {' · '}
+    <a target="_blank" href="/shop">
+      shop
+    </a>
   </div>
 )
 
 export const SeedButton: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [seeded, setSeeded] = useState(false)
-  const [error, setError] = useState<unknown>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const handleClick = useCallback(
     async (e: MouseEvent<HTMLButtonElement>) => {
@@ -31,44 +35,39 @@ export const SeedButton: React.FC = () => {
         toast.info('Seeding already in progress.')
         return
       }
-      if (error) {
-        toast.error(`An error occurred, please refresh and try again.`)
-        return
-      }
 
       setLoading(true)
+      setError(null)
+
+      const run = (async () => {
+        const res = await fetch('/next/seed', { method: 'POST', credentials: 'include' })
+        const body = (await res.json().catch(() => ({}))) as { error?: string; success?: boolean }
+        if (!res.ok) {
+          const msg =
+            body.error ||
+            (res.status === 403
+              ? 'Admin login required before seeding.'
+              : `Seed failed (${res.status})`)
+          setError(msg)
+          throw new Error(msg)
+        }
+        setSeeded(true)
+        return true
+      })()
 
       try {
-        toast.promise(
-          new Promise((resolve, reject) => {
-            try {
-              fetch('/next/seed', { method: 'POST', credentials: 'include' })
-                .then((res) => {
-                  if (res.ok) {
-                    resolve(true)
-                    setSeeded(true)
-                  } else {
-                    reject('An error occurred while seeding.')
-                  }
-                })
-                .catch((error) => {
-                  reject(error)
-                })
-            } catch (error) {
-              reject(error)
-            }
-          }),
-          {
-            loading: 'Seeding with data....',
-            success: <SuccessMessage />,
-            error: 'An error occurred while seeding.',
-          },
-        )
+        await toast.promise(run, {
+          loading: 'Seeding with data....',
+          success: <SuccessMessage />,
+          error: (err: Error) => err?.message || 'An error occurred while seeding.',
+        })
       } catch (err) {
-        setError(err)
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setLoading(false)
       }
     },
-    [loading, seeded, error],
+    [loading, seeded],
   )
 
   let message = ''
@@ -78,7 +77,7 @@ export const SeedButton: React.FC = () => {
 
   return (
     <Fragment>
-      <button className="seedButton" onClick={handleClick}>
+      <button className="seedButton" onClick={handleClick} type="button" disabled={loading}>
         Seed your database
       </button>
       {message}

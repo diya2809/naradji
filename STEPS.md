@@ -66,11 +66,12 @@ pnpx create-payload-app@latest cursor-ahm \
 - Mistake we fixed: do **not** redirect `/checkout` → home or delete chrome for “demo speed”.
 
 ### 4. Seed 12 grocery SKUs + aliases
-**Status:** done · `pnpm seed:naradji`
+**Status:** done · `pnpm seed:naradji` · also appended by admin **Seed your database**
 
 - Products get `aliases[]` + `unit` (voice matching).
 - In-memory catalog (`lib/naradji/catalog.ts`) loads once; fallback list if DB is cold.
 - **Rule:** Payload only at load time + order confirm — never per utterance.
+- **Admin seed fix (2026-07-18):** do not wrap `/next/seed` in `createLocalReq` (Atlas txn breaks `gallery.variantOption` filterOptions). Prefer local seed PNGs; disable revalidate during seed; show real error text on SeedButton.
 
 ### 5. Define the UISpec contract first
 **Status:** done · Vitest covers this
