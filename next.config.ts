@@ -15,6 +15,18 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Voice catalog CSV must ship with serverless functions (/api/catalog, /api/interpret).
+  // Without this, Vercel ENOENT crashes interpret after STT succeeds.
+  outputFileTracingIncludes: {
+    '/api/**/*': [
+      './docs/seller-product-catalog.csv',
+      './src/lib/catalog/seller-product-catalog.csv',
+    ],
+    '/src/app/api/**/*': [
+      './docs/seller-product-catalog.csv',
+      './src/lib/catalog/seller-product-catalog.csv',
+    ],
+  },
   // Temporarily required on Windows until Next.js fixes Turbopack Sass resolution.
   // See: https://github.com/vercel/next.js/issues/86431
   sassOptions: {

@@ -76,8 +76,14 @@ export function MicPill({
     discardRecording()
     const gen = ++listenGen.current
 
-    if (demo || !supported) {
-      setMicState('listening')
+    // Unsupported browser: demo rehearsal breath only when ?demo=1; else clarify.
+    // When mic works, always record real speech — even in demo mode (hackathon).
+    if (!supported) {
+      if (demo) {
+        setMicState('listening')
+        return
+      }
+      await finishWithText('', gen)
       return
     }
     try {
@@ -133,8 +139,8 @@ export function MicPill({
       r.stop()
       return
     }
-    // Demo mode: tap-to-stop with no real recorder → process demo breath
-    if (demo || !supported) {
+    // No MediaRecorder session (unsupported + demo, or demo stop before start).
+    if (demo) {
       void finishWithText(DEMO_BREATH_TRANSCRIPT, gen)
     }
   }

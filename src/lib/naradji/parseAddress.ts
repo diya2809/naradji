@@ -70,6 +70,7 @@ export function parseSpokenAddress(transcript: string): ShippingAddress | null {
 
   if (!line && !phone && !postalCode) return null
 
+  // Demo-lenient defaults so hackathon address breath still works.
   return {
     name: 'Voice customer',
     phone,

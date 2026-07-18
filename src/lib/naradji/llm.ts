@@ -3,7 +3,7 @@ import { openai } from '@ai-sdk/openai'
 import { UISpecSchema, emptyPrefill, type UISpec } from './uispec'
 import type { LeanProduct } from './catalog'
 import { matchAliases, wantsCOD } from './aliases'
-import { detectCartOp } from './cartIntent'
+import { detectCartOp, isBareNegation } from './cartIntent'
 import { addressReadback, looksLikeAddress, parseSpokenAddress } from './parseAddress'
 import { answerProductQuery, looksLikeProductQuery } from './productQuery'
 
@@ -23,7 +23,9 @@ Rules:
 - qty defaults to 1. reason nullable.
 - prefill.payment is "cod" when they said COD, else null.
 - Prefer alias-matched items; never invent SKUs.
-- Never treat a remove utterance as an add.`
+- Cart add/remove/replace items MUST come from aliasHits when present; never invent product ids.
+- Never treat a remove utterance as an add.
+- Bare "nahi"/"no" with no product → empty items, ask to clarify.`
 
 function leanForPrompt(catalog: LeanProduct[]) {
   return catalog.map(({ id, title, price, unit, category, aliases }) => ({
@@ -79,9 +81,7 @@ function mergeAliasFirst(
   }
 
   const aliasHits = matchAliases(transcript, catalog)
-  const byId = new Map(catalog.map((p) => [p.id, p]))
-  const validLlm = llm.items.filter((i) => byId.has(i.id))
-
+  // Cart mutations require deterministic product grounding — never trust LLM-picked SKUs alone.
   const items =
     aliasHits.length > 0
       ? aliasHits.map((h) => ({
@@ -89,7 +89,7 @@ function mergeAliasFirst(
           qty: h.qty,
           reason: null as string | null,
         }))
-      : validLlm
+      : []
 
   const layout =
     llm.layout === 'confirm' || items.length >= 2
@@ -172,6 +172,21 @@ export function interpretOffline(
   const prevItems = state?.items ?? []
   const prevPrefill = state?.prefill ?? emptyPrefill()
   const cartOp = detectCartOp(transcript)
+
+  if (isBareNegation(transcript)) {
+    return {
+      language,
+      naradji_line: 'Kya nahi chahiye? Item ka naam boliye.',
+      layout: 'grid',
+      items: [],
+      prefill: {
+        ...emptyPrefill(),
+        payment: null,
+        shipping: prevPrefill?.shipping ?? null,
+      },
+      cartOp: 'add',
+    }
+  }
 
   if (looksLikeAddress(transcript)) {
     const shipping = parseSpokenAddress(transcript)

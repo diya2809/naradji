@@ -15,7 +15,7 @@ import {
   resolveCartLines,
 } from '@/lib/naradji/voiceCopy'
 import { applyCartOp } from '@/lib/naradji/cartIntent'
-import { syncVoiceCartOp } from '@/lib/naradji/syncVoiceToCart'
+import { syncVoiceCartOp, voiceCartFromStoreLines } from '@/lib/naradji/syncVoiceToCart'
 import { shippingToAddressPayload } from '@/lib/naradji/saveVoiceAddress'
 import { MicPill } from './MicPill'
 
@@ -109,6 +109,8 @@ export function NaradjiVoiceLayer() {
   const ttsAbort = useRef<AbortController | null>(null)
   /** Bumps when user barges in — stale speak/interpret results are ignored. */
   const turnEpoch = useRef(0)
+  /** Serialize cart mutations so barge-in / rapid turns cannot race Payload. */
+  const cartQueue = useRef(Promise.resolve())
   const typedRef = useRef<HTMLInputElement>(null)
   const greetedRef = useRef(false)
   const [catalogError, setCatalogError] = useState(false)
@@ -128,7 +130,15 @@ export function NaradjiVoiceLayer() {
       try {
         const res = await fetch('/api/catalog')
         const data = (await res.json()) as { catalog?: LeanProduct[] }
-        if (!cancelled && data.catalog?.length) setCatalog(data.catalog)
+        if (cancelled) return
+        const next = data.catalog ?? []
+        if (!next.length) {
+          setCatalogError(true)
+          return
+        }
+        setCatalog(next)
+        // Warn only — Payload productIds may arrive on refresh; don't hard-block demo.
+        if (!next.some((p) => p.productId)) setCatalogError(true)
       } catch {
         if (!cancelled) setCatalogError(true)
       }
@@ -137,6 +147,20 @@ export function NaradjiVoiceLayer() {
       cancelled = true
     }
   }, [pathname, setCatalog])
+
+  // Keep voice session cart as a mirror of Payload (manual + voice).
+  useEffect(() => {
+    if (!catalog.length) return
+    const storeLines = (cart?.items ?? []).map((line) => ({
+      id: line.id,
+      quantity: line.quantity,
+      product:
+        typeof line.product === 'object' && line.product
+          ? { id: line.product.id }
+          : line.product,
+    }))
+    setCartItems(voiceCartFromStoreLines(storeLines, catalog))
+  }, [cart?.items, catalog, setCartItems])
 
   const speak = useCallback(
     async (text: string, language = 'hinglish', forEpoch?: number) => {
@@ -190,8 +214,17 @@ export function NaradjiVoiceLayer() {
       }
 
       const live = useNaradjiStore.getState()
-      const liveCart = live.cartItems
       const livePrefill = live.uispec.prefill
+      const storeLinesNow = (cart?.items ?? []).map((line) => ({
+        id: line.id,
+        quantity: line.quantity,
+        product:
+          typeof line.product === 'object' && line.product
+            ? { id: line.product.id }
+            : line.product,
+      }))
+      // Payload cart is authoritative for confirm + cart ops.
+      const liveCart = voiceCartFromStoreLines(storeLinesNow, catalog)
       const liveSpec: UISpec = {
         ...live.uispec,
         items: liveCart,
@@ -207,7 +240,6 @@ export function NaradjiVoiceLayer() {
           return
         }
         if (!stillCurrent()) return
-        go('/cart')
         go('/checkout')
         if (stillCurrent()) await say('Checkout khol diya. Wahan confirm kar lijiye.')
         return
@@ -240,7 +272,7 @@ export function NaradjiVoiceLayer() {
           return
         }
 
-        // Address — save via Payload addresses API (lenient demo defaults).
+        // Address — demo-lenient save via Payload addresses API.
         if (data.mode === 'address' || next.prefill?.shipping) {
           const shipping = next.prefill?.shipping
           if (!shipping) {
@@ -251,7 +283,7 @@ export function NaradjiVoiceLayer() {
           const prefill = mergePrefill(livePrefill, next.prefill)
           setUISpec({
             ...next,
-            items: useNaradjiStore.getState().cartItems,
+            items: liveCart,
             prefill,
           })
           try {
@@ -266,7 +298,6 @@ export function NaradjiVoiceLayer() {
             )
           } catch {
             if (!stillCurrent()) return
-            // Guest / auth fail — still acknowledge and send to checkout to fill form.
             go('/checkout')
             await say(
               'Address note kiya. Checkout pe check kar lijiye — kuch missing ho to wahan bhar dena.',
@@ -280,7 +311,7 @@ export function NaradjiVoiceLayer() {
         const cartOp = next.cartOp ?? 'add'
 
         if (cartOp === 'add' && !uttered.length) {
-          if (stillCurrent()) await clarify()
+          if (stillCurrent()) await say(next.naradji_line || CLARIFY_LINE, next.language)
           return
         }
         if (cartOp === 'remove' && !uttered.length) {
@@ -293,19 +324,45 @@ export function NaradjiVoiceLayer() {
         }
 
         if (!stillCurrent()) return
-        const cartNow = useNaradjiStore.getState().cartItems
-        const storeLines = (cart?.items ?? []).map((line) => ({
-          id: line.id,
-          quantity: line.quantity,
-          product:
-            typeof line.product === 'object' && line.product
-              ? { id: line.product.id }
-              : line.product,
-        }))
+        if (!catalog.some((p) => p.productId)) {
+          if (stillCurrent()) await say('Catalog ready nahi hai. Thodi der baad try kariye.')
+          return
+        }
 
-        // Session cart can lag the Payload cart (prior buggy adds). For remove/clear,
-        // Payload lines are the storefront source of truth.
+        const cartNow = liveCart
+        const storeLines = storeLinesNow
         const mergedItems = applyCartOp(cartNow, uttered, cartOp)
+
+        // Serialize + commit session only after Payload sync succeeds.
+        const syncResult = await new Promise<{
+          skipped: string[]
+          removed: number
+          synced: number
+        }>((resolve, reject) => {
+          cartQueue.current = cartQueue.current
+            .then(async () => {
+              if (!stillCurrent()) {
+                resolve({ skipped: [], removed: 0, synced: 0 })
+                return
+              }
+              const result = await syncVoiceCartOp({
+                op: cartOp,
+                items: uttered,
+                desiredCart: mergedItems,
+                catalog,
+                cartLines: storeLines,
+                addItem,
+                removeItem,
+                clearCart,
+              })
+              resolve(result)
+            })
+            .catch(reject)
+        })
+
+        if (!stillCurrent()) return
+        const { skipped, removed } = syncResult
+        setCartSyncSkipped(skipped)
         setCartItems(mergedItems)
         setUISpec({
           ...next,
@@ -314,19 +371,6 @@ export function NaradjiVoiceLayer() {
           prefill: mergePrefill(livePrefill, next.prefill),
           layout: 'express',
         })
-
-        const { skipped, removed } = await syncVoiceCartOp({
-          op: cartOp,
-          items: uttered,
-          desiredCart: mergedItems,
-          catalog,
-          cartLines: storeLines,
-          addItem,
-          removeItem,
-          clearCart,
-        })
-        if (!stillCurrent()) return
-        setCartSyncSkipped(skipped)
 
         if (cartOp === 'clear') {
           go('/cart')
@@ -349,6 +393,8 @@ export function NaradjiVoiceLayer() {
 
         const lines = resolveCartLines({ ...next, items: mergedItems }, catalog)
         if (!lines.length || (cartOp === 'add' && skipped.length === uttered.length)) {
+          // Roll session back to Payload mirror — sync did not land purchasable lines.
+          setCartItems(cartNow)
           await say(
             'Narayan Narayan. Yeh item catalog mein nahi mila. Koi aur naam boliye — doodh, atta, chai…',
           )

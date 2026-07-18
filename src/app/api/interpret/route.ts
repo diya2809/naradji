@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { generateObject } from 'ai'
 import { getCatalog } from '@/lib/naradji/catalog'
 import { matchAliases } from '@/lib/naradji/aliases'
+import { detectCartOp, isBareNegation } from '@/lib/naradji/cartIntent'
 import { looksLikeAddress } from '@/lib/naradji/parseAddress'
 import { looksLikeProductQuery } from '@/lib/naradji/productQuery'
 import {
@@ -31,21 +32,29 @@ export async function POST(req: Request) {
   const catalog = await getCatalog()
   const state = body.state ?? null
 
-  // Address + product Q&A before alias cart (compare cues can also match SKUs).
-  if (!body.stream && (looksLikeAddress(transcript) || looksLikeProductQuery(transcript))) {
+  const aliasHits = matchAliases(transcript, catalog)
+  const cartOp = detectCartOp(transcript)
+
+  // Deterministic paths first — never let LLM invent cart SKUs for clear/remove/replace/alias.
+  if (
+    !body.stream &&
+    (looksLikeAddress(transcript) ||
+      looksLikeProductQuery(transcript) ||
+      isBareNegation(transcript) ||
+      cartOp === 'clear' ||
+      cartOp === 'remove' ||
+      cartOp === 'replace' ||
+      aliasHits.length > 0)
+  ) {
     const offline = interpretOffline(transcript, catalog, state)
     const mode = looksLikeAddress(transcript)
       ? 'address'
       : offline.layout === 'compare'
         ? 'compare'
-        : 'offline'
+        : aliasHits.length > 0
+          ? 'alias'
+          : 'offline'
     return NextResponse.json({ uispec: offline, mode })
-  }
-
-  const aliasHits = matchAliases(transcript, catalog)
-  if (aliasHits.length > 0 && !body.stream) {
-    const offline = interpretOffline(transcript, catalog, state)
-    return NextResponse.json({ uispec: offline, mode: 'alias' })
   }
 
   if (!hasLLMKey()) {

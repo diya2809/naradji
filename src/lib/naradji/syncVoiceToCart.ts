@@ -1,5 +1,5 @@
 import type { LeanProduct } from './catalog'
-import type { CartOp } from './cartIntent'
+import { clampQty, type CartLine, type CartOp } from './cartIntent'
 import type { UISpec } from './uispec'
 
 type AddItemFn = (
@@ -26,6 +26,34 @@ function productIdOf(product: StoreCartLine['product']): string | null {
 
 function linesForProduct(cartLines: StoreCartLine[], productId: string): StoreCartLine[] {
   return cartLines.filter((line) => productIdOf(line.product) === productId && line.id)
+}
+
+/**
+ * Derive Naradji cart lines from the Payload store cart.
+ * Payload is the only authority — session cart is a mirror of this.
+ */
+export function voiceCartFromStoreLines(
+  cartLines: StoreCartLine[],
+  catalog: LeanProduct[],
+): CartLine[] {
+  const byProductId = new Map(
+    catalog.filter((p) => p.productId).map((p) => [String(p.productId), p]),
+  )
+  const merged = new Map<string, CartLine>()
+  for (const line of cartLines) {
+    const pid = productIdOf(line.product)
+    if (!pid) continue
+    const product = byProductId.get(pid)
+    if (!product) continue
+    const qty = clampQty(line.quantity || 1)
+    const existing = merged.get(product.id)
+    if (existing) {
+      merged.set(product.id, { ...existing, qty: clampQty((existing.qty || 1) + qty) })
+    } else {
+      merged.set(product.id, { id: product.id, qty, reason: null })
+    }
+  }
+  return [...merged.values()]
 }
 
 /**
@@ -86,7 +114,7 @@ export async function syncVoiceCartOp(opts: {
         skipped.push(item.id)
         continue
       }
-      const qty = Math.max(1, Math.min(99, Math.round(item.qty || 1)))
+      const qty = clampQty(item.qty || 1)
       await addItem({ product: product.productId }, qty)
       synced += 1
     }
@@ -101,10 +129,7 @@ export async function syncVoiceCartOp(opts: {
       skipped.push(item.id)
       continue
     }
-    desiredByProductId.set(
-      String(product.productId),
-      Math.max(1, Math.min(99, Math.round(item.qty || 1))),
-    )
+    desiredByProductId.set(String(product.productId), clampQty(item.qty || 1))
   }
 
   for (const line of cartLines) {
@@ -137,23 +162,4 @@ export async function syncVoiceCartOp(opts: {
   }
 
   return { synced, removed, skipped }
-}
-
-/** @deprecated Use syncVoiceCartOp — kept for older call sites/tests during migration. */
-export async function syncVoiceItemsToStoreCart(
-  uispec: UISpec,
-  catalog: LeanProduct[],
-  addItem: AddItemFn,
-): Promise<{ synced: number; skipped: string[] }> {
-  const result = await syncVoiceCartOp({
-    op: 'add',
-    items: uispec.items,
-    desiredCart: uispec.items,
-    catalog,
-    cartLines: [],
-    addItem,
-    removeItem: async () => undefined,
-    clearCart: async () => undefined,
-  })
-  return { synced: result.synced, skipped: result.skipped }
 }

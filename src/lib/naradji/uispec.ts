@@ -75,7 +75,12 @@ export const emptyUISpec = (): UISpec => ({
   cartOp: 'add',
 })
 
-/** Lenient: any shipping object counts (partial/empty OK — server fills defaults). */
+/** True when spoken shipping has the fields needed to save (no invented defaults). */
 export function hasUsableShipping(shipping: ShippingAddress | null | undefined): boolean {
-  return Boolean(shipping)
+  if (!shipping) return false
+  const phone = (shipping.phone || '').replace(/\D/g, '')
+  const pin = (shipping.postalCode || '').replace(/\D/g, '')
+  const line = (shipping.addressLine1 || '').trim()
+  const city = (shipping.city || '').trim()
+  return phone.length >= 10 && pin.length === 6 && Boolean(line && city)
 }

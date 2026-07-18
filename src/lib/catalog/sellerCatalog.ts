@@ -17,10 +17,35 @@ export type SellerProductRow = {
   imageUrl: string
 }
 
-const DEFAULT_CSV = path.resolve(
+/** Prefer CSV next to this module (traced into Vercel functions). docs/ is secondary. */
+const BUNDLED_CSV = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  './seller-product-catalog.csv',
+)
+const DOCS_CSV = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../../docs/seller-product-catalog.csv',
 )
+
+/** Resolve CSV on local + Vercel without crashing serverless boot. */
+function resolveCsvPath(preferred?: string): string | null {
+  const candidates = [
+    preferred,
+    BUNDLED_CSV,
+    DOCS_CSV,
+    path.join(process.cwd(), 'docs/seller-product-catalog.csv'),
+    path.join(process.cwd(), 'src/lib/catalog/seller-product-catalog.csv'),
+  ].filter((p): p is string => Boolean(p))
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate
+    } catch {
+      // ignore
+    }
+  }
+  return null
+}
 
 /** Slugify a title/category into a stable URL segment. */
 export function slugifyLabel(input: string): string {
@@ -130,10 +155,24 @@ export function parseSellerCatalogCsv(text: string): SellerProductRow[] {
   return rows
 }
 
-/** Load authoritative seller catalog from disk (seed / server only). */
-export function loadSellerCatalog(csvPath: string = DEFAULT_CSV): SellerProductRow[] {
-  const text = fs.readFileSync(csvPath, 'utf8')
-  return parseSellerCatalogCsv(text)
+/**
+ * Load authoritative seller catalog from disk (seed / server only).
+ * Never throws on missing file — Vercel serverless must boot even if CSV
+ * was not traced into the bundle (Payload DB is the runtime source of truth).
+ */
+export function loadSellerCatalog(csvPath?: string): SellerProductRow[] {
+  const resolved = resolveCsvPath(csvPath)
+  if (!resolved) {
+    console.warn('[sellerCatalog] CSV not found — returning empty fallback')
+    return []
+  }
+  try {
+    const text = fs.readFileSync(resolved, 'utf8')
+    return parseSellerCatalogCsv(text)
+  } catch (err) {
+    console.warn('[sellerCatalog] CSV read failed — returning empty fallback', err)
+    return []
+  }
 }
 
 export function uniqueCategories(rows: SellerProductRow[]): string[] {

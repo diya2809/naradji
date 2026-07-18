@@ -13,6 +13,8 @@ describe('detectCartOp', () => {
     expect(detectCartOp('cart khali kar do')).toBe('clear')
     expect(detectCartOp('clear cart')).toBe('clear')
     expect(detectCartOp('sirf yeh doodh rakho')).toBe('replace')
+    expect(detectCartOp('sirf chai chahiye')).toBe('replace')
+    expect(detectCartOp('only milk')).toBe('replace')
   })
 
   it('defaults grocery lists to add', () => {

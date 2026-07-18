@@ -3,15 +3,12 @@ import { toAddressPayload } from '@/ecommerce/addressForm'
 import type { ShippingAddress } from './uispec'
 
 /**
- * Demo-lenient shipping → Payload address payload.
- * Fills missing phone/pin/apartment so hustled spoken addresses still save.
+ * Spoken shipping → Payload address form.
+ * Demo-lenient: fill missing pin/phone/city so address breath still saves in a hackathon demo.
  */
 export function shippingToAddressForm(shipping: ShippingAddress): AddressFormValues {
   const phoneDigits = (shipping.phone || '').replace(/\D/g, '')
-  const phone =
-    phoneDigits.length >= 10
-      ? phoneDigits.slice(-10)
-      : '9876543210' /* demo fallback — not strict */
+  const phone = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : '9876543210'
 
   const pin = (shipping.postalCode || '').replace(/\D/g, '')
   const postalCode = pin.length === 6 ? pin : '380001'

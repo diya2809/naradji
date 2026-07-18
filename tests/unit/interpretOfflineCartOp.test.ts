@@ -57,4 +57,23 @@ describe('interpretOffline cartOp', () => {
     expect(spec.cartOp).toBe('clear')
     expect(spec.items).toEqual([])
   })
+
+  it('sirf product replaces rather than appends', () => {
+    const state = {
+      ...emptyUISpec(),
+      items: [
+        { id: 'milk', qty: 2, reason: null },
+        { id: 'atta', qty: 1, reason: null },
+      ],
+    }
+    const spec = interpretOffline('sirf doodh chahiye', catalog, state)
+    expect(spec.cartOp).toBe('replace')
+    expect(spec.items.map((i) => i.id)).toEqual(['milk'])
+  })
+
+  it('bare nahi clarifies without inventing items', () => {
+    const spec = interpretOffline('nahi', catalog, emptyUISpec())
+    expect(spec.items).toEqual([])
+    expect(spec.cartOp).toBe('add')
+  })
 })

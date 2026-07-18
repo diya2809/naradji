@@ -31,9 +31,15 @@ export function catalogFromSellerCsv(): LeanProduct[] {
 
 /**
  * Sync catalog for tests / offline paths.
- * Same CSV as seed — not a parallel demo SKU list.
+ * Safe empty array when CSV is missing on Vercel — Payload is authoritative.
  */
-export const FALLBACK_CATALOG: LeanProduct[] = catalogFromSellerCsv()
+export const FALLBACK_CATALOG: LeanProduct[] = (() => {
+  try {
+    return catalogFromSellerCsv()
+  } catch {
+    return []
+  }
+})()
 
 function normalizeAliases(aliases: unknown): string[] {
   if (!Array.isArray(aliases)) return []

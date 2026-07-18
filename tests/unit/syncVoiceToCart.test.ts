@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { syncVoiceCartOp, syncVoiceItemsToStoreCart } from '../../src/lib/naradji/syncVoiceToCart'
+import { syncVoiceCartOp, voiceCartFromStoreLines } from '../../src/lib/naradji/syncVoiceToCart'
 import type { LeanProduct } from '../../src/lib/naradji/catalog'
-import type { UISpec } from '../../src/lib/naradji/uispec'
 
 const catalog: LeanProduct[] = [
   {
@@ -36,28 +35,45 @@ const catalog: LeanProduct[] = [
   },
 ]
 
-describe('syncVoiceItemsToStoreCart', () => {
-  it('adds Payload product ids and skips CSV-only rows', async () => {
-    const uispec: UISpec = {
-      language: 'hinglish',
-      naradji_line: '',
-      layout: 'express',
-      items: [
-        { id: 'atta', qty: 2, reason: null },
-        { id: 'ghost', qty: 1, reason: null },
-      ],
-      prefill: null,
-      cartOp: 'add',
-    }
-    const addItem = vi.fn(async () => undefined)
-    const result = await syncVoiceItemsToStoreCart(uispec, catalog, addItem)
-    expect(result.synced).toBe(1)
-    expect(result.skipped).toEqual(['ghost'])
-    expect(addItem).toHaveBeenCalledWith({ product: 'abc123' }, 2)
+describe('voiceCartFromStoreLines', () => {
+  it('maps Payload lines to catalog slugs and skips unmapped products', () => {
+    expect(
+      voiceCartFromStoreLines(
+        [
+          { id: 'line-atta', quantity: 2, product: { id: 'abc123' } },
+          { id: 'line-milk', quantity: 1, product: 'milk99' },
+          { id: 'line-x', quantity: 1, product: { id: 'unknown' } },
+        ],
+        catalog,
+      ),
+    ).toEqual([
+      { id: 'atta', qty: 2, reason: null },
+      { id: 'milk', qty: 1, reason: null },
+    ])
   })
 })
 
 describe('syncVoiceCartOp', () => {
+  it('add skips CSV-only rows without productId', async () => {
+    const addItem = vi.fn(async () => undefined)
+    const result = await syncVoiceCartOp({
+      op: 'add',
+      items: [
+        { id: 'atta', qty: 2, reason: null },
+        { id: 'ghost', qty: 1, reason: null },
+      ],
+      desiredCart: [],
+      catalog,
+      cartLines: [],
+      addItem,
+      removeItem: vi.fn(async () => undefined),
+      clearCart: vi.fn(async () => undefined),
+    })
+    expect(result.synced).toBe(1)
+    expect(result.skipped).toEqual(['ghost'])
+    expect(addItem).toHaveBeenCalledWith({ product: 'abc123' }, 2)
+  })
+
   it('remove deletes matching store cart lines by product id', async () => {
     const removeItem = vi.fn(async () => undefined)
     const addItem = vi.fn(async () => undefined)

@@ -1,20 +1,9 @@
 import type { LeanProduct } from './catalog'
 import { emptyPrefill, type UISpec } from './uispec'
 
-/** Opening line when the sheet rises — short, then listen. */
+/** Opening line (TTS only — no morph sheet). */
 export const GREETING_LINE =
   'Narayan Narayan. Dekhiye, aapko kya order karna hai?'
-
-export function greetingUISpec(): UISpec {
-  return {
-    language: 'hinglish',
-    naradji_line: GREETING_LINE,
-    layout: 'express',
-    items: [],
-    prefill: emptyPrefill(),
-    cartOp: 'add',
-  }
-}
 
 export type CartLine = {
   id: string
