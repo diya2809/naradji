@@ -1,6 +1,5 @@
-import { streamObject } from 'ai'
-import { anthropic } from '@ai-sdk/anthropic'
-import { createGateway } from 'ai'
+import { createGateway, streamObject } from 'ai'
+import { openai } from '@ai-sdk/openai'
 import { UISpecSchema, type UISpec } from './uispec'
 import type { LeanProduct } from './catalog'
 import { matchAliases, wantsCOD } from './aliases'
@@ -75,15 +74,19 @@ function mergeAliasFirst(
   }
 }
 
-function resolveModel() {
+/** Fast OpenAI model for morph. Gateway optional. */
+export function resolveModel() {
   if (process.env.AI_GATEWAY_API_KEY) {
-    const gateway = createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY })
-    return gateway('anthropic/claude-haiku-4.5')
+    return createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY })('openai/gpt-4o-mini')
   }
-  return anthropic('claude-haiku-4.5')
+  return openai('gpt-4o-mini')
 }
 
-/** Alias-first interpret via AI SDK streamObject (Haiku). */
+export function hasLLMKey() {
+  return Boolean(process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY)
+}
+
+/** Alias-first interpret via AI SDK streamObject (gpt-4o-mini). */
 export function interpretStream(opts: {
   transcript: string
   catalog: LeanProduct[]
@@ -102,10 +105,6 @@ export function interpretStream(opts: {
       catalog: leanForPrompt(catalog),
       state,
     }),
-    onFinish: ({ object }) => {
-      // merge happens on client after parse; keep server stream raw schema
-      void object
-    },
   })
 }
 
@@ -125,15 +124,20 @@ export function interpretOffline(
   const hits = matchAliases(transcript, catalog)
   const cod = wantsCOD(transcript)
   const items = hits.map((h) => ({ id: h.id, qty: h.qty, reason: null as string | null }))
-  const layout = items.length >= 2 || cod ? (cod && items.length ? 'confirm' : 'express') : items.length ? 'express' : 'grid'
+  const layout =
+    items.length >= 2 || cod
+      ? cod && items.length
+        ? 'confirm'
+        : 'express'
+      : items.length
+        ? 'express'
+        : 'grid'
   return {
     language: /[\u0A80-\u0AFF]/.test(transcript)
       ? 'gu'
       : /[\u0900-\u097F]/.test(transcript)
         ? 'hi'
-        : /[a-z]/i.test(transcript) && /[अ-हઅ-હ]/.test(transcript)
-          ? 'hinglish'
-          : 'hinglish',
+        : 'hinglish',
     naradji_line:
       items.length > 0
         ? cod

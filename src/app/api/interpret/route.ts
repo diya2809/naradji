@@ -1,24 +1,17 @@
 import { NextResponse } from 'next/server'
-import { getCatalog } from '@/lib/naradji/catalog'
-import { interpretOffline, interpretStream, finalizeUISpec } from '@/lib/naradji/llm'
-import { UISpecSchema, type UISpec } from '@/lib/naradji/uispec'
 import { generateObject } from 'ai'
-import { anthropic } from '@ai-sdk/anthropic'
-import { createGateway } from 'ai'
+import { getCatalog } from '@/lib/naradji/catalog'
+import {
+  finalizeUISpec,
+  hasLLMKey,
+  interpretOffline,
+  interpretStream,
+  resolveModel,
+} from '@/lib/naradji/llm'
+import { UISpecSchema, type UISpec } from '@/lib/naradji/uispec'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
-
-function hasLLMKey() {
-  return Boolean(process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_API_KEY)
-}
-
-function resolveModel() {
-  if (process.env.AI_GATEWAY_API_KEY) {
-    return createGateway({ apiKey: process.env.AI_GATEWAY_API_KEY })('anthropic/claude-haiku-4.5')
-  }
-  return anthropic('claude-haiku-4.5')
-}
 
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
@@ -40,7 +33,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ uispec: offline, mode: 'offline' })
   }
 
-  // Prefer non-stream JSON for reliable client morph; stream when requested
   if (body.stream) {
     const result = interpretStream({ transcript, catalog, state })
     return result.toTextStreamResponse()
