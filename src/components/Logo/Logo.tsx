@@ -20,6 +20,7 @@ export const Logo = ({ className, size = 'icon' }: Props) => {
       width={dim}
       height={dim}
       priority
+      quality={90}
       className={cn(
         'object-contain object-center',
         size === 'icon' ? 'size-9' : 'size-12',
