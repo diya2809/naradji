@@ -13,7 +13,7 @@ import {
 } from "@tabler/icons-react";
 import { cn } from "@/utilities/index";
 import { AnimatePresence, motion } from "motion/react";
-import Image, { ImageProps } from "next/image";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -34,6 +34,9 @@ type Card = {
   categoryHref?: string;
   content: React.ReactNode;
 };
+
+/** Card face sizes: w-56 / h-80 mobile, md:w-96 / md:h-160 desktop */
+const CARD_IMAGE_SIZES = "(max-width: 768px) 14rem, 24rem";
 
 export const CarouselContext = createContext<{
   onCardClose: (index: number) => void;
@@ -248,24 +251,21 @@ export const Card = ({
       </div>
       {card.mobileSrc ? (
         <>
-          <BlurImage
+          <CardImage
             alt={card.title}
             className="absolute inset-0 z-10 object-cover md:hidden"
-            fill
             src={card.mobileSrc}
           />
-          <BlurImage
+          <CardImage
             alt={card.title}
             className="absolute inset-0 z-10 hidden object-cover md:block"
-            fill
             src={card.src}
           />
         </>
       ) : (
-        <BlurImage
+        <CardImage
           alt={card.title}
           className="absolute inset-0 z-10 object-cover"
-          fill
           src={card.src}
         />
       )}
@@ -334,32 +334,35 @@ export const Card = ({
 
 
 
-export const BlurImage = ({
-  height,
-  width,
+/**
+ * Sharp card background — no CSS blur placeholder.
+ * Aceternity's BlurImage left blur-sm stuck when cached images skipped onLoad.
+ */
+export const CardImage = ({
   src,
   className,
   alt,
-  fill,
-  ...rest
-}: ImageProps & { fill?: boolean }) => {
-  const [isLoading, setLoading] = useState(true);
+}: {
+  src: string;
+  className?: string;
+  alt: string;
+}) => {
+  if (!src) return null;
+
+  const isPayloadMedia = src.startsWith("/api/media/file/");
+
   return (
-    <img
-      className={cn(
-        fill ? "absolute inset-0 h-full w-full" : "h-full w-full",
-        "transition duration-300",
-        isLoading ? "blur-sm" : "blur-0",
-        className,
-      )}
-      onLoad={() => setLoading(false)}
-      src={src as string}
-      width={width}
-      height={height}
-      loading="lazy"
-      decoding="async"
-      alt={alt ? alt : "Background of a beautiful view"}
-      {...rest}
+    <Image
+      alt={alt || "Category"}
+      className={cn("object-cover", className)}
+      fill
+      quality={90}
+      sizes={CARD_IMAGE_SIZES}
+      src={src}
+      unoptimized={isPayloadMedia}
     />
   );
 };
+
+/** @deprecated Use CardImage — kept so older demos keep compiling */
+export const BlurImage = CardImage;

@@ -151,7 +151,8 @@ export function MicPill({
   return (
     <div
       className={[
-        'pointer-events-none fixed z-50 flex px-3 md:px-4',
+        // Above Vaul/Radix overlays (z-50) so Naradji stays tappable.
+        'pointer-events-none fixed z-[9999] flex px-3 md:px-4',
         listening
           ? 'bottom-[calc(var(--site-bottom-nav-offset)+0.75rem)] left-0 items-end gap-2 md:bottom-6 md:left-4'
           : 'inset-x-0 bottom-[calc(var(--site-bottom-nav-offset)+0.75rem)] flex-col items-center gap-2 md:bottom-6',

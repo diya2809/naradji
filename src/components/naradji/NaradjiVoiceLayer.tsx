@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { createPortal } from 'react-dom'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCart } from '@payloadcms/plugin-ecommerce/client/react'
@@ -102,6 +103,11 @@ export function NaradjiVoiceLayer() {
   const ttsAbort = useRef<AbortController | null>(null)
   const typedRef = useRef<HTMLInputElement>(null)
   const [catalogError, setCatalogError] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!shouldMountVoice(pathname)) return
@@ -362,7 +368,7 @@ export function NaradjiVoiceLayer() {
     ],
   )
 
-  if (!shouldMountVoice(pathname)) return null
+  if (!shouldMountVoice(pathname) || !mounted) return null
 
   const cartView: UISpec = { ...uispec, items: cartItems }
   const lines = resolveCartLines(cartView, catalog)
@@ -379,10 +385,11 @@ export function NaradjiVoiceLayer() {
     micState !== 'greeting' &&
     (lines.length > 0 || showCompare || showConfirm || Boolean(lastOrderId))
 
-  return (
+  // Portal to body so Naradji sits above Vaul/Radix overlays (own stacking root).
+  return createPortal(
     <>
       {demo ? (
-        <div className="pointer-events-none fixed bottom-[calc(var(--site-bottom-nav-offset)+5.5rem)] right-4 z-40 flex max-w-sm flex-col items-end gap-2 md:bottom-32">
+        <div className="pointer-events-none fixed bottom-[calc(var(--site-bottom-nav-offset)+5.5rem)] right-4 z-[9999] flex max-w-sm flex-col items-end gap-2 md:bottom-32">
           <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
             <button
               type="button"
@@ -549,6 +556,7 @@ export function NaradjiVoiceLayer() {
       </AnimatePresence>
 
       <MicPill demo={demo} onOpenSession={openSession} onTranscript={onTranscript} />
-    </>
+    </>,
+    document.body,
   )
 }

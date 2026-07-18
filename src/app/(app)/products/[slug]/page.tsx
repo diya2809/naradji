@@ -25,24 +25,30 @@ import React, { Suspense } from 'react'
 export const revalidate = 3600
 
 export async function generateStaticParams() {
-  const payload = await getPayload({ config: configPromise })
-  const products = await payload.find({
-    collection: 'products',
-    draft: false,
-    limit: 1000,
-    overrideAccess: false,
-    pagination: false,
-    select: {
-      slug: true,
-    },
-    where: {
-      _status: {
-        equals: 'published',
+  try {
+    const payload = await getPayload({ config: configPromise })
+    const products = await payload.find({
+      collection: 'products',
+      draft: false,
+      limit: 1000,
+      overrideAccess: false,
+      pagination: false,
+      select: {
+        slug: true,
       },
-    },
-  })
+      where: {
+        _status: {
+          equals: 'published',
+        },
+      },
+    })
 
-  return products.docs.map(({ slug }) => ({ slug }))
+    return products.docs.map(({ slug }) => ({ slug }))
+  } catch (error) {
+    // Don't fail Vercel/production builds if DB is unavailable at build time.
+    console.warn('[products] generateStaticParams skipped:', error)
+    return []
+  }
 }
 
 type Args = {
