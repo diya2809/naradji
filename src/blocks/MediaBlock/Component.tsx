@@ -1,11 +1,12 @@
 import type { StaticImageData } from 'next/image'
 
+import { BlockWrapper } from '@/components/BlockWrapper'
+import { MaxWidthWrapper } from '@/components/MaxWidthWrapper'
+import { ResponsiveMedia } from '@/components/Media/ResponsiveMedia'
 import { cn } from '@/utilities/cn'
 import React from 'react'
 import { RichText } from '@/components/RichText'
 import type { MediaBlock as MediaBlockProps } from '@/payload-types'
-
-import { Media } from '../../components/Media'
 
 export const MediaBlock: React.FC<
   MediaBlockProps & {
@@ -25,41 +26,37 @@ export const MediaBlock: React.FC<
     enableGutter = true,
     imgClassName,
     media,
+    mobileLayout,
+    mobileMedia,
     staticImage,
     disableInnerContainer,
+    textAlign,
   } = props
 
   let caption
   if (media && typeof media === 'object') caption = media.caption
 
   return (
-    <div
-      className={cn(
-        '',
-        {
-          container: enableGutter,
-        },
-        className,
-      )}
-    >
-      <Media
-        imgClassName={cn('border border-border rounded-[0.8rem]', imgClassName)}
-        resource={media}
-        src={staticImage}
-      />
-      {caption && (
-        <div
-          className={cn(
-            'mt-6',
-            {
-              container: !disableInnerContainer,
-            },
-            captionClassName,
-          )}
-        >
-          <RichText data={caption} enableGutter={false} />
-        </div>
-      )}
-    </div>
+    <BlockWrapper fullBleed={!enableGutter} mobileLayout={mobileLayout} textAlign={textAlign}>
+      <div className={cn(className)}>
+        <ResponsiveMedia
+          desktop={media}
+          imgClassName={cn('h-auto w-full object-contain', imgClassName)}
+          mobile={mobileMedia}
+          src={staticImage}
+        />
+        {caption ? (
+          !enableGutter && !disableInnerContainer ? (
+            <MaxWidthWrapper className={cn('mt-6', captionClassName)}>
+              <RichText data={caption} enableGutter={false} />
+            </MaxWidthWrapper>
+          ) : (
+            <div className={cn('mt-6', captionClassName)}>
+              <RichText data={caption} enableGutter={false} />
+            </div>
+          )
+        ) : null}
+      </div>
+    </BlockWrapper>
   )
 }

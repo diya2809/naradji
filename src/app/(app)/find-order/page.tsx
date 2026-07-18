@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 
 import { mergeOpenGraph } from '@/utilities/mergeOpenGraph'
 import React from 'react'
+import { MaxWidthWrapper } from '@/components/MaxWidthWrapper'
 import { FindOrderForm } from '@/components/forms/FindOrderForm'
 import { getPayload } from 'payload'
 import { headers as getHeaders } from 'next/headers.js'
@@ -13,9 +14,9 @@ export default async function FindOrderPage() {
   const { user } = await payload.auth({ headers })
 
   return (
-    <div className="container py-16">
+    <MaxWidthWrapper className="py-16">
       <FindOrderForm initialEmail={user?.email} />
-    </div>
+    </MaxWidthWrapper>
   )
 }
 

@@ -1,118 +1,225 @@
 'use client'
 
+import { cn } from '@/utilities/index'
 import { Media } from '@/components/Media'
-import { Message } from '@/components/Message'
 import { Price } from '@/components/Price'
+import { ProductPriceDisplay } from '@/components/ProductPriceDisplay'
+import { getLineItemPricing } from '@/utilities/productPricing'
+import { getProductLineItemImage } from '@/utilities/productLineItemImage'
+import { getShippingCharge } from '@/lib/shippingCharge'
+import {
+  formatAddressContactError,
+  getAddressContactIssues,
+  isAddressReadyForCheckout,
+} from '@/ecommerce/addressForm'
+import { AddressItem } from '@/components/addresses/AddressItem'
+import { CreateAddressModal } from '@/components/addresses/CreateAddressModal'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { useAuth } from '@/providers/Auth'
-import { useTheme } from '@/providers/Theme'
-import { Elements } from '@stripe/react-stripe-js'
-import { loadStripe } from '@stripe/stripe-js'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Separator } from '@/components/ui/separator'
+import { LoginForm } from '@/components/forms/LoginForm'
+import { LoadingSpinner } from '@/components/LoadingSpinner'
+import type { Address } from '@/payload-types'
+import type { VariantOptionEntry } from '@/types/storefront'
+import { useAddresses, useCart, usePayments } from '@payloadcms/plugin-ecommerce/client/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import React, { Suspense, useCallback, useEffect, useState } from 'react'
-
-import { cssVariables } from '@/cssVariables'
-import { CheckoutForm } from '@/components/forms/CheckoutForm'
-import { useAddresses, useCart, usePayments } from '@payloadcms/plugin-ecommerce/client/react'
-import { CheckoutAddresses } from '@/components/checkout/CheckoutAddresses'
-import { CreateAddressModal } from '@/components/addresses/CreateAddressModal'
-import { Address } from '@/payload-types'
-import { Checkbox } from '@/components/ui/checkbox'
-import { AddressItem } from '@/components/addresses/AddressItem'
-import { FormItem } from '@/components/forms/FormItem'
+import React, { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { LoadingSpinner } from '@/components/LoadingSpinner'
+import { useAuth } from '@/providers/Auth'
+import { IconAlertCircle, IconPencil } from '@tabler/icons-react'
 
-const apiKey = `${process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}`
-const stripe = loadStripe(apiKey)
+function CheckoutSection({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-4 border-b border-border pb-8 last:border-b-0">
+      <h2 className="text-2xl font-semibold">{title}</h2>
+      {children}
+    </section>
+  )
+}
 
 export const CheckoutPage: React.FC = () => {
   const { user } = useAuth()
   const router = useRouter()
-  const { cart } = useCart()
+  const { cart, clearCart } = useCart()
   const [error, setError] = useState<null | string>(null)
-  const { theme } = useTheme()
-  /**
-   * State to manage the email input for guest checkout.
-   */
-  const [email, setEmail] = useState('')
-  const [emailEditable, setEmailEditable] = useState(true)
-  const [paymentData, setPaymentData] = useState<null | Record<string, unknown>>(null)
-  const { initiatePayment } = usePayments()
-  const { addresses } = useAddresses()
-  const [shippingAddress, setShippingAddress] = useState<Partial<Address>>()
+  const { initiatePayment, confirmOrder } = usePayments()
+  const { addresses } = useAddresses() as { addresses: Address[] | undefined }
   const [billingAddress, setBillingAddress] = useState<Partial<Address>>()
-  const [billingAddressSameAsShipping, setBillingAddressSameAsShipping] = useState(true)
   const [isProcessingPayment, setProcessingPayment] = useState(false)
 
   const cartIsEmpty = !cart || !cart.items || !cart.items.length
 
-  const canGoToPayment = Boolean(
-    (email || user) && billingAddress && (billingAddressSameAsShipping || shippingAddress),
-  )
+  const addressContactIssues = getAddressContactIssues(billingAddress)
+  const addressReady = isAddressReadyForCheckout(billingAddress)
+  const checkoutErrorTitle =
+    addressContactIssues.length > 0 ||
+    Boolean(error && /delivery address|full name|phone number/i.test(error))
+      ? 'Address incomplete'
+      : 'Couldn’t start payment'
 
-  // On initial load wait for addresses to be loaded and check to see if we can prefill a default one
+  // Prefill default address when saved addresses load (prefer one with name + phone)
   useEffect(() => {
-    if (!shippingAddress) {
-      if (addresses && addresses.length > 0) {
-        const defaultAddress = addresses[0]
-        if (defaultAddress) {
-          setBillingAddress(defaultAddress)
-        }
+    if (!billingAddress && addresses?.length) {
+      const ready = addresses.find((address) => isAddressReadyForCheckout(address))
+      const defaultAddress = ready || addresses[0]
+      if (defaultAddress) {
+        setBillingAddress(defaultAddress)
       }
     }
-  }, [addresses])
+  }, [addresses, billingAddress])
+
+  // Keep selected address in sync after edit (e.g. name/phone added)
+  useEffect(() => {
+    if (!billingAddress?.id || !addresses?.length) return
+    const latest = addresses.find((address) => address.id === billingAddress.id)
+    if (
+      latest &&
+      (latest.name !== billingAddress.name ||
+        latest.phone !== billingAddress.phone ||
+        latest.alternatePhone !== billingAddress.alternatePhone ||
+        latest.addressLine1 !== billingAddress.addressLine1 ||
+        latest.addressLine2 !== billingAddress.addressLine2 ||
+        latest.city !== billingAddress.city ||
+        latest.state !== billingAddress.state ||
+        latest.postalCode !== billingAddress.postalCode)
+    ) {
+      setBillingAddress(latest)
+      setError(null)
+    }
+  }, [addresses, billingAddress])
 
   useEffect(() => {
     return () => {
-      setShippingAddress(undefined)
       setBillingAddress(undefined)
-      setBillingAddressSameAsShipping(true)
-      setEmail('')
-      setEmailEditable(true)
     }
   }, [])
 
-  const initiatePaymentIntent = useCallback(
-    async (paymentID: string) => {
-      try {
-        const paymentData = (await initiatePayment(paymentID, {
-          additionalData: {
-            ...(email ? { customerEmail: email } : {}),
-            billingAddress,
-            shippingAddress: billingAddressSameAsShipping ? billingAddress : shippingAddress,
-          },
-        })) as Record<string, unknown>
+  const showCheckoutError = useCallback((message: string) => {
+    setError(message)
+    toast.error(message)
+  }, [])
 
-        if (paymentData) {
-          setPaymentData(paymentData)
-        }
-      } catch (error) {
-        const errorData = error instanceof Error ? JSON.parse(error.message) : {}
-        let errorMessage = 'An error occurred while initiating payment.'
+  const placeCodOrder = useCallback(async () => {
+    setError(null)
 
-        if (errorData?.cause?.code === 'OutOfStock') {
-          errorMessage = 'One or more items in your cart are out of stock.'
-        }
+    if (!billingAddress) {
+      showCheckoutError('Please select a delivery address before placing the order.')
+      return
+    }
 
-        setError(errorMessage)
-        toast.error(errorMessage)
+    const contactIssues = getAddressContactIssues(billingAddress)
+    if (contactIssues.length > 0) {
+      showCheckoutError(formatAddressContactError(contactIssues))
+      return
+    }
+
+    setProcessingPayment(true)
+    try {
+      const paymentData = (await initiatePayment('cod', {
+        additionalData: {
+          customerEmail: user?.email,
+          billingAddress,
+          shippingAddress: billingAddress,
+        },
+      })) as Record<string, unknown>
+
+      const reference =
+        (paymentData.reference as string | undefined) ||
+        (paymentData.orderID as string | undefined)
+
+      if (!reference) {
+        throw new Error('We couldn’t start your COD order. Please try again.')
       }
-    },
-    [billingAddress, billingAddressSameAsShipping, shippingAddress],
-  )
 
-  if (!stripe) return null
+      const confirmResult = await confirmOrder('cod', {
+        additionalData: {
+          reference,
+          orderID: reference,
+          ...(user?.email ? { customerEmail: user.email } : {}),
+        },
+      })
+
+      if (
+        confirmResult &&
+        typeof confirmResult === 'object' &&
+        'orderID' in confirmResult &&
+        confirmResult.orderID
+      ) {
+        try {
+          await clearCart()
+        } catch {
+          // Non-fatal: order already succeeded; cart cleared server-side.
+        }
+
+        toast.success('Order placed — pay cash on delivery. Redirecting…')
+        router.replace('/orders')
+        return
+      }
+
+      throw new Error('We couldn’t confirm your COD order. Please try again.')
+    } catch (error) {
+      let errorMessage = 'We couldn’t place your order. Please try again.'
+
+      if (error instanceof Error && error.message) {
+        try {
+          const errorData = JSON.parse(error.message) as {
+            cause?: { code?: string }
+            errors?: Array<{
+              message?: string
+              data?: { errors?: Array<{ message?: string; path?: string }> }
+            }>
+            message?: string
+          }
+
+          if (errorData?.cause?.code === 'OutOfStock') {
+            errorMessage = 'One or more items in your cart are out of stock.'
+          } else {
+            const nested =
+              errorData.errors?.[0]?.data?.errors?.map((e) => e.message).filter(Boolean) ||
+              errorData.errors?.map((e) => e.message).filter(Boolean)
+            if (nested?.length) {
+              const joined = nested.join(' ')
+              if (/name|phone|billingAddress|shippingAddress/i.test(joined)) {
+                errorMessage =
+                  'Please add your full name and phone number to the delivery address, then try again.'
+              } else {
+                errorMessage = joined
+              }
+            } else if (errorData.message && !errorData.message.startsWith('{')) {
+              errorMessage = errorData.message
+            }
+          }
+        } catch {
+          if (!error.message.startsWith('{')) {
+            errorMessage = error.message
+          }
+        }
+      }
+
+      showCheckoutError(errorMessage)
+      setProcessingPayment(false)
+    }
+  }, [
+    billingAddress,
+    user?.email,
+    initiatePayment,
+    confirmOrder,
+    clearCart,
+    router,
+    showCheckoutError,
+  ])
 
   if (cartIsEmpty && isProcessingPayment) {
     return (
-      <div className="py-12 w-full items-center justify-center">
-        <div className="prose dark:prose-invert text-center max-w-none self-center mb-8">
-          <p>Processing your payment...</p>
-        </div>
+      <div className="flex w-full flex-col items-center gap-4 py-12">
+        <h2 className="text-2xl font-semibold">Placing your order…</h2>
         <LoadingSpinner />
       </div>
     )
@@ -120,321 +227,251 @@ export const CheckoutPage: React.FC = () => {
 
   if (cartIsEmpty) {
     return (
-      <div className="prose dark:prose-invert py-12 w-full items-center">
-        <p>Your cart is empty.</p>
-        <Link href="/search">Continue shopping?</Link>
+      <div className="flex w-full flex-col items-center gap-4 py-12">
+        <p className="text-lg text-muted-foreground">Your cart is empty.</p>
+        <Button asChild variant="outline">
+          <Link href="/shop">Continue shopping</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="mx-auto w-full max-w-md pt-1 pb-12 md:max-w-lg">
+        <LoginForm redirectOverride="/checkout" />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col items-stretch justify-stretch my-8 md:flex-row grow gap-10 md:gap-6 lg:gap-8">
-      <div className="basis-full lg:basis-2/3 flex flex-col gap-8 justify-stretch">
-        <h2 className="font-medium text-3xl">Contact</h2>
-        {!user && (
-          <div className=" bg-accent dark:bg-black rounded-lg p-4 w-full flex items-center">
-            <div className="prose dark:prose-invert">
-              <Button asChild className="no-underline text-inherit" variant="outline">
-                <Link href="/login">Log in</Link>
-              </Button>
-              <p className="mt-0">
-                <span className="mx-2">or</span>
-                <Link href="/create-account">create an account</Link>
-              </p>
-            </div>
-          </div>
-        )}
-        {user ? (
-          <div className="bg-accent dark:bg-card rounded-lg p-4 ">
-            <div>
-              <p>{user.email}</p>{' '}
-              <p>
-                Not you?{' '}
-                <Link className="underline" href="/logout">
-                  Log out
-                </Link>
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-accent dark:bg-black rounded-lg p-4 ">
-            <div>
-              <p className="mb-4">Enter your email to checkout as a guest.</p>
+    <div className="my-8 grid w-full gap-10 grid-cols-1 md:grid-cols-5">
+      <div className="space-y-8 md:col-span-3">
 
-              <FormItem className="mb-6">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  disabled={!emailEditable}
-                  id="email"
-                  name="email"
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  type="email"
-                />
-              </FormItem>
-
-              <Button
-                disabled={!email || !emailEditable}
-                onClick={(e) => {
-                  e.preventDefault()
-                  setEmailEditable(false)
-                }}
-                variant="default"
-              >
-                Continue as guest
-              </Button>
-            </div>
-          </div>
-        )}
-
-        <h2 className="font-medium text-3xl">Address</h2>
-
-        {billingAddress ? (
-          <div>
-            <AddressItem
-              actions={
-                <Button
-                  variant={'outline'}
-                  disabled={Boolean(paymentData)}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setBillingAddress(undefined)
-                  }}
-                >
-                  Remove
-                </Button>
-              }
-              address={billingAddress}
-            />
-          </div>
-        ) : user ? (
-          <CheckoutAddresses heading="Billing address" setAddress={setBillingAddress} />
-        ) : (
-          <CreateAddressModal
-            disabled={!email || Boolean(emailEditable)}
-            callback={(address) => {
-              setBillingAddress(address)
-            }}
-            skipSubmission={true}
-          />
-        )}
-
-        <div className="flex gap-4 items-center">
-          <Checkbox
-            id="shippingTheSameAsBilling"
-            checked={billingAddressSameAsShipping}
-            disabled={Boolean(paymentData || (!user && (!email || Boolean(emailEditable))))}
-            onCheckedChange={(state) => {
-              setBillingAddressSameAsShipping(state as boolean)
-            }}
-          />
-          <Label htmlFor="shippingTheSameAsBilling">Shipping is the same as billing</Label>
-        </div>
-
-        {!billingAddressSameAsShipping && (
-          <>
-            {shippingAddress ? (
-              <div>
-                <AddressItem
-                  actions={
-                    <Button
-                      variant={'outline'}
-                      disabled={Boolean(paymentData)}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setShippingAddress(undefined)
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  }
-                  address={shippingAddress}
+        {/* Step 1: Delivery Address selection */}
+          <CheckoutSection title="Delivery Address">
+            {!addresses?.length ? (
+              <div className="pt-2 flex justify-start">
+                <CreateAddressModal
+                  buttonText="+ Add Address"
+                  callback={(address) => setBillingAddress(address)}
+                  modalTitle="New address"
+                  disabled={isProcessingPayment}
                 />
               </div>
-            ) : user ? (
-              <CheckoutAddresses
-                heading="Shipping address"
-                description="Please select a shipping address."
-                setAddress={setShippingAddress}
-              />
             ) : (
-              <CreateAddressModal
-                callback={(address) => {
-                  setShippingAddress(address)
-                }}
-                disabled={!email || Boolean(emailEditable)}
-                skipSubmission={true}
-              />
-            )}
-          </>
-        )}
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">Select a delivery address below:</p>
+                <div className="grid gap-4 grid-cols-1">
+                  {addresses.map((address) => {
+                    const isSelected = billingAddress?.id === address.id
+                    const incomplete = getAddressContactIssues(address).length > 0
+                    return (
+                      <div
+                        key={address.id}
+                        onClick={() => {
+                          setBillingAddress(address)
+                          setError(null)
+                        }}
+                        className={cn(
+                          'relative flex max-w-xl cursor-pointer items-center justify-between gap-6 rounded-xl border px-4 py-2.5 transition-all hover:bg-muted/40',
+                          isSelected
+                            ? incomplete
+                              ? 'border-destructive ring-1 ring-destructive bg-destructive/[0.03]'
+                              : 'border-primary ring-1 ring-primary bg-primary/[0.02]'
+                            : 'border-border bg-card',
+                        )}
+                      >
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <AddressItem address={address} hideActions />
+                          {incomplete ? (
+                            <p className="text-xs text-destructive">
+                              Missing name or phone — edit to complete
+                            </p>
+                          ) : null}
+                        </div>
 
-        {!paymentData && (
-          <Button
-            className="self-start"
-            disabled={!canGoToPayment}
-            onClick={(e) => {
-              e.preventDefault()
-              void initiatePaymentIntent('stripe')
-            }}
-          >
-            Go to payment
-          </Button>
-        )}
-
-        {!paymentData?.['clientSecret'] && error && (
-          <div className="my-8">
-            <Message error={error} />
-
-            <Button
-              onClick={(e) => {
-                e.preventDefault()
-                router.refresh()
-              }}
-              variant="default"
-            >
-              Try again
-            </Button>
-          </div>
-        )}
-
-        <Suspense fallback={<React.Fragment />}>
-          {/* @ts-ignore */}
-          {paymentData && paymentData?.['clientSecret'] && (
-            <div className="pb-16">
-              <h2 className="font-medium text-3xl">Payment</h2>
-              {error && <p>{`Error: ${error}`}</p>}
-              <Elements
-                options={{
-                  appearance: {
-                    theme: 'stripe',
-                    variables: {
-                      borderRadius: '6px',
-                      colorPrimary: '#858585',
-                      gridColumnSpacing: '20px',
-                      gridRowSpacing: '20px',
-                      colorBackground: theme === 'dark' ? '#0a0a0a' : cssVariables.colors.base0,
-                      colorDanger: cssVariables.colors.error500,
-                      colorDangerText: cssVariables.colors.error500,
-                      colorIcon:
-                        theme === 'dark' ? cssVariables.colors.base0 : cssVariables.colors.base1000,
-                      colorText: theme === 'dark' ? '#858585' : cssVariables.colors.base1000,
-                      colorTextPlaceholder: '#858585',
-                      fontFamily: 'Geist, sans-serif',
-                      fontSizeBase: '16px',
-                      fontWeightBold: '600',
-                      fontWeightNormal: '500',
-                      spacingUnit: '4px',
-                    },
-                  },
-                  clientSecret: paymentData['clientSecret'] as string,
-                }}
-                stripe={stripe}
-              >
-                <div className="flex flex-col gap-8">
-                  <CheckoutForm
-                    customerEmail={email}
-                    billingAddress={billingAddress}
-                    setProcessingPayment={setProcessingPayment}
-                  />
-                  <Button
-                    variant="ghost"
-                    className="self-start"
-                    onClick={() => setPaymentData(null)}
-                  >
-                    Cancel payment
-                  </Button>
+                        <div className="flex shrink-0 items-center gap-4" onClick={(e) => e.stopPropagation()}>
+                          <CreateAddressModal
+                            addressID={address.id}
+                            initialData={address}
+                            modalTitle="Edit address"
+                            disabled={isProcessingPayment}
+                            callback={(updated) => {
+                              setBillingAddress({ ...address, ...updated })
+                              setError(null)
+                            }}
+                            renderTrigger={(onClick) => (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={onClick}
+                                disabled={isProcessingPayment}
+                                title="Edit Address"
+                                className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:bg-muted/50 hover:text-primary"
+                              >
+                                <IconPencil className="h-4.5 w-4.5" />
+                              </Button>
+                            )}
+                          />
+                          <div
+                            className={cn(
+                              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+                              isSelected
+                                ? incomplete
+                                  ? 'border-destructive bg-destructive text-destructive-foreground'
+                                  : 'border-primary bg-primary text-primary-foreground'
+                                : 'border-muted-foreground/50 bg-transparent',
+                            )}
+                            onClick={() => {
+                              setBillingAddress(address)
+                              setError(null)
+                            }}
+                          >
+                            {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              </Elements>
-            </div>
-          )}
-        </Suspense>
+
+                <div className="pt-2">
+                  <CreateAddressModal
+                    buttonText="+ Add Address"
+                    callback={(address) => {
+                      setBillingAddress(address)
+                      setError(null)
+                    }}
+                    modalTitle="New address"
+                    disabled={isProcessingPayment}
+                  />
+                </div>
+              </div>
+            )}
+
+            {error ? (
+              <Alert variant="destructive" className="mt-4">
+                <IconAlertCircle />
+                <AlertTitle>{checkoutErrorTitle}</AlertTitle>
+                <AlertDescription>
+                  <p>{error}</p>
+                  {addressContactIssues.length > 0 ? (
+                    <p className="mt-2 text-sm">
+                      Tap the pencil icon on your address to add the missing details.
+                    </p>
+                  ) : null}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            {addresses && addresses.length > 0 && (
+              <div className="mt-8 flex flex-col items-stretch gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-end">
+                {!addressReady && billingAddress ? (
+                  <p className="text-sm text-muted-foreground sm:mr-auto">
+                    Add name and phone to your address to continue.
+                  </p>
+                ) : null}
+                <Button
+                  size="lg"
+                  disabled={!billingAddress || isProcessingPayment}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    void placeCodOrder()
+                  }}
+                >
+                  {isProcessingPayment ? 'Placing order…' : 'Place COD order'}
+                </Button>
+              </div>
+            )}
+          </CheckoutSection>
       </div>
 
-      {!cartIsEmpty && (
-        <div className="basis-full lg:basis-1/3 lg:pl-8 p-8 border-none bg-primary/5 flex flex-col gap-8 rounded-lg">
-          <h2 className="text-3xl font-medium">Your cart</h2>
-          {cart?.items?.map((item, index) => {
-            if (typeof item.product === 'object' && item.product) {
-              const {
-                product,
-                product: { id, meta, title, gallery },
-                quantity,
-                variant,
-              } = item
+      <aside className="h-fit space-y-4 md:sticky md:top-24 md:col-span-2">
+        <h2 className="text-2xl font-semibold">Order Summary</h2>
+        {cart?.items?.map((item, index) => {
+          if (typeof item.product === 'object' && item.product) {
+            const { product, quantity, variant } = item
 
-              if (!quantity) return null
+            if (!quantity) return null
 
-              let image = gallery?.[0]?.image || meta?.image
-              let price = product?.priceInUSD
+            const isVariant = Boolean(variant) && typeof variant === 'object'
+            const image = getProductLineItemImage(product, isVariant ? variant : undefined)
+            const unitPricing = getLineItemPricing(product, isVariant ? variant : undefined)
 
-              const isVariant = Boolean(variant) && typeof variant === 'object'
-
-              if (isVariant) {
-                price = variant?.priceInUSD
-
-                const imageVariant = product.gallery?.find((item) => {
-                  if (!item.variantOption) return false
-                  const variantOptionID =
-                    typeof item.variantOption === 'object'
-                      ? item.variantOption.id
-                      : item.variantOption
-
-                  const hasMatch = variant?.options?.some((option) => {
-                    if (typeof option === 'object') return option.id === variantOptionID
-                    else return option === variantOptionID
-                  })
-
-                  return hasMatch
-                })
-
-                if (imageVariant && typeof imageVariant.image !== 'string') {
-                  image = imageVariant.image
-                }
-              }
-
-              return (
-                <div className="flex items-start gap-4" key={index}>
-                  <div className="flex items-stretch justify-stretch h-20 w-20 p-2 rounded-lg border">
-                    <div className="relative w-full h-full">
-                      {image && typeof image !== 'string' && (
-                        <Media className="" fill imgClassName="rounded-lg" resource={image} />
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex grow justify-between items-center">
-                    <div className="flex flex-col gap-1">
-                      <p className="font-medium text-lg">{title}</p>
-                      {variant && typeof variant === 'object' && (
-                        <p className="text-sm font-mono text-primary/50 tracking-widest">
-                          {variant.options
-                            ?.map((option) => {
-                              if (typeof option === 'object') return option.label
-                              return null
-                            })
-                            .join(', ')}
-                        </p>
-                      )}
-                      <div>
-                        {'x'}
-                        {quantity}
-                      </div>
-                    </div>
-
-                    {typeof price === 'number' && <Price amount={price} />}
+            return (
+              <div className="flex items-start gap-3" key={index}>
+                <div className="flex h-16 w-16 items-center justify-center rounded-md border border-border bg-muted p-1.5">
+                  <div className="relative h-full w-full">
+                    {image ? (
+                      <Media
+                        className="h-full w-full"
+                        fill
+                        imgClassName="rounded-sm object-cover"
+                        resource={image}
+                      />
+                    ) : null}
                   </div>
                 </div>
-              )
-            }
-            return null
-          })}
-          <hr />
-          <div className="flex justify-between items-center gap-2">
-            <span className="uppercase">Total</span>{' '}
-            <Price className="text-3xl font-medium" amount={cart.subtotal || 0} />
-          </div>
-        </div>
-      )}
+                <div className="flex grow flex-col justify-start gap-1">
+                  <p className="text-sm font-medium text-foreground">{product.title}</p>
+                  
+                  <ProductPriceDisplay
+                    className="justify-start text-left"
+                    priceClassName="text-sm font-semibold text-foreground"
+                    pricing={unitPricing}
+                  />
+
+                  <p className="text-xs text-muted-foreground">Qty {quantity}</p>
+
+                  {variant && typeof variant === 'object' && (
+                    <p className="text-xs text-muted-foreground">
+                      {variant.options
+                        ?.map((option: VariantOptionEntry) => {
+                          if (typeof option === 'object' && option) {
+                            const name = typeof option.variantType === 'object' && option.variantType ? option.variantType.label : 'Variant'
+                            return `${name}: ${option.label}`
+                          }
+                          return null
+                        })
+                        .filter(Boolean)
+                        .join(', ')}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )
+          }
+          return null
+        })}
+        <Separator />
+        {(() => {
+          const productSubtotal = cart.subtotal || 0
+          const shippingCharge = getShippingCharge(productSubtotal)
+          const grandTotal = productSubtotal + shippingCharge
+          return (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">Products</span>
+                <Price amount={productSubtotal} className="text-sm font-medium" />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">Shipping</span>
+                {shippingCharge > 0 ? (
+                  <Price amount={shippingCharge} className="text-sm font-medium" />
+                ) : (
+                  <span className="text-sm font-semibold text-foreground">Free</span>
+                )}
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-foreground">Total</span>
+                <Price amount={grandTotal} className="text-xl font-semibold" />
+              </div>
+            </div>
+          )
+        })()}
+      </aside>
     </div>
   )
 }

@@ -2,11 +2,14 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 
-import type { Theme, ThemeContextType } from './types'
+import type { Theme, ThemeContextType, ThemeSetting } from './types'
 
 import { canUseDOM } from '@/utilities/canUseDOM'
-import { defaultTheme, getImplicitPreference, themeLocalStorageKey } from './shared'
-import { themeIsValid } from './types'
+import {
+  preferenceIsValid,
+  resolveTheme,
+  themeLocalStorageKey,
+} from './shared'
 
 const initialContext: ThemeContextType = {
   setTheme: () => null,
@@ -15,40 +18,39 @@ const initialContext: ThemeContextType = {
 
 const ThemeContext = createContext(initialContext)
 
+function applyResolvedTheme(preference: null | string) {
+  const resolved = resolveTheme(preference)
+  document.documentElement.setAttribute('data-theme', resolved)
+  return resolved
+}
+
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [theme, setThemeState] = useState<Theme | undefined>(
     canUseDOM ? (document.documentElement.getAttribute('data-theme') as Theme) : undefined,
   )
 
-  const setTheme = useCallback((themeToSet: Theme | null) => {
-    if (themeToSet === null) {
-      window.localStorage.removeItem(themeLocalStorageKey)
-      const implicitPreference = getImplicitPreference()
-      document.documentElement.setAttribute('data-theme', implicitPreference || '')
-      if (implicitPreference) setThemeState(implicitPreference)
-    } else {
-      setThemeState(themeToSet)
-      window.localStorage.setItem(themeLocalStorageKey, themeToSet)
-      document.documentElement.setAttribute('data-theme', themeToSet)
-    }
+  const setTheme = useCallback((themeToSet: ThemeSetting) => {
+    window.localStorage.setItem(themeLocalStorageKey, themeToSet)
+    const resolved = applyResolvedTheme(themeToSet)
+    setThemeState(resolved)
   }, [])
 
   useEffect(() => {
-    let themeToSet: Theme = defaultTheme
     const preference = window.localStorage.getItem(themeLocalStorageKey)
+    const resolved = applyResolvedTheme(preferenceIsValid(preference) ? preference : null)
+    setThemeState(resolved)
 
-    if (themeIsValid(preference)) {
-      themeToSet = preference
-    } else {
-      const implicitPreference = getImplicitPreference()
-
-      if (implicitPreference) {
-        themeToSet = implicitPreference
-      }
+    const onSystemThemeChange = () => {
+      const stored = window.localStorage.getItem(themeLocalStorageKey)
+      if (stored !== 'auto') return
+      const next = applyResolvedTheme('auto')
+      setThemeState(next)
     }
 
-    document.documentElement.setAttribute('data-theme', themeToSet)
-    setThemeState(themeToSet)
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    mediaQuery.addEventListener('change', onSystemThemeChange)
+
+    return () => mediaQuery.removeEventListener('change', onSystemThemeChange)
   }, [])
 
   return <ThemeContext.Provider value={{ setTheme, theme }}>{children}</ThemeContext.Provider>

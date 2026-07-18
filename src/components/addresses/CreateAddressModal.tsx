@@ -1,72 +1,153 @@
 'use client'
+
+import { AddressFormFields } from '@/components/addresses/AddressFormFields'
 import { Button } from '@/components/ui/button'
-import React, { useState } from 'react'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
-import { AddressForm } from '@/components/forms/AddressForm'
-import { Address } from '@/payload-types'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
+import { useIsMobile } from '@/hooks/use-mobile'
+import {
+  toAddressFormValues,
+  toAddressPayload,
+  type AddressFormValues,
+  type AddressInput,
+} from '@/ecommerce/addressForm'
+import type { Address } from '@/payload-types'
+import { useAddresses } from '@payloadcms/plugin-ecommerce/client/react'
 import { DefaultDocumentIDType } from 'payload'
+import { useCallback, useEffect, useState } from 'react'
+import { useForm } from 'react-hook-form'
 
 type Props = {
   addressID?: DefaultDocumentIDType
-  initialData?: Partial<Omit<Address, 'country'>> & { country?: string }
+  initialData?: AddressInput
   buttonText?: string
   modalTitle?: string
   callback?: (address: Partial<Address>) => void
   skipSubmission?: boolean
   disabled?: boolean
+  renderTrigger?: (onClick: () => void) => React.ReactNode
 }
 
-export const CreateAddressModal: React.FC<Props> = ({
+export function CreateAddressModal({
   addressID,
   initialData,
-  buttonText = 'Add a new address',
-  modalTitle = 'Add a new address',
+  buttonText = 'Add address',
+  modalTitle = 'New address',
   callback,
   skipSubmission,
   disabled,
-}) => {
+  renderTrigger,
+}: Props) {
+  const isMobile = useIsMobile()
+  const [mounted, setMounted] = useState(false)
   const [open, setOpen] = useState(false)
-  const handleOpenChange = (state: boolean) => {
-    setOpen(state)
-  }
+  const { createAddress, updateAddress } = useAddresses()
 
-  const closeModal = () => {
-    setOpen(false)
-  }
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  const handleCallback = (data: Partial<Address>) => {
-    closeModal()
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<AddressFormValues>({
+    defaultValues: toAddressFormValues(initialData),
+  })
 
-    if (callback) {
-      callback(data)
+  const onSubmit = useCallback(
+    async (data: AddressFormValues) => {
+      const payload = toAddressPayload(data)
+
+      if (!skipSubmission) {
+        if (addressID) {
+          await updateAddress(addressID, payload)
+        } else {
+          await createAddress(payload)
+        }
+      }
+
+      setOpen(false)
+      reset(toAddressFormValues(initialData))
+      callback?.(payload)
+    },
+    [addressID, callback, createAddress, initialData, reset, skipSubmission, updateAddress],
+  )
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen)
+
+    if (nextOpen) {
+      reset(toAddressFormValues(initialData))
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild disabled={disabled}>
-        <Button variant={'outline'}>{buttonText}</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{modalTitle}</DialogTitle>
-          <DialogDescription>This address will be connected to your account.</DialogDescription>
-        </DialogHeader>
+  const fields = <AddressFormFields errors={errors} register={register} />
 
-        <AddressForm
-          addressID={addressID}
-          initialData={initialData}
-          callback={handleCallback}
-          skipSubmission={skipSubmission}
-        />
-      </DialogContent>
-    </Dialog>
+  const trigger = renderTrigger ? (
+    renderTrigger(() => handleOpenChange(true))
+  ) : (
+    <Button disabled={disabled} onClick={() => handleOpenChange(true)} type="button" variant="outline">
+      {buttonText}
+    </Button>
+  )
+
+  if (!mounted) {
+    return trigger
+  }
+
+  if (isMobile) {
+    return (
+      <>
+        {trigger}
+        <Drawer direction="bottom" onOpenChange={handleOpenChange} open={open}>
+          <DrawerContent className="max-h-[85vh]">
+            <form
+              className="flex max-h-[inherit] min-h-0 flex-col overflow-hidden"
+              onSubmit={handleSubmit(onSubmit)}
+            >
+              <DrawerHeader className="flex-row items-center justify-between gap-3 text-left">
+                <DrawerTitle className="min-w-0 flex-1 text-left">{modalTitle}</DrawerTitle>
+                <Button type="submit" size="sm" className="shrink-0">
+                  Save
+                </Button>
+              </DrawerHeader>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{fields}</div>
+            </form>
+          </DrawerContent>
+        </Drawer>
+      </>
+    )
+  }
+
+  return (
+    <>
+      {trigger}
+      <Dialog onOpenChange={handleOpenChange} open={open}>
+        <DialogContent className="sm:max-w-lg">
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <DialogHeader>
+              <DialogTitle>{modalTitle}</DialogTitle>
+            </DialogHeader>
+            <div className="-mx-4 max-h-[60vh] overflow-y-auto px-4 no-scrollbar">{fields}</div>
+            <DialogFooter>
+              <Button type="submit">Save address</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

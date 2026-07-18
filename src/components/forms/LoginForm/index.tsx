@@ -17,10 +17,10 @@ type FormData = {
   password: string
 }
 
-export const LoginForm: React.FC = () => {
+export const LoginForm: React.FC<{ redirectOverride?: string }> = ({ redirectOverride }) => {
   const searchParams = useSearchParams()
   const allParams = searchParams.toString() ? `?${searchParams.toString()}` : ''
-  const redirect = useRef(searchParams.get('redirect'))
+  const redirect = useRef(redirectOverride || searchParams.get('redirect'))
   const { login } = useAuth()
   const router = useRouter()
   const [error, setError] = React.useState<null | string>(null)

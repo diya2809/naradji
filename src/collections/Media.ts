@@ -19,7 +19,9 @@ export const Media: CollectionConfig = {
   },
   slug: 'media',
   access: {
-    create: adminOnly,
+    // Authenticated storefront users need create for review photo/video uploads.
+    // Keep delete/update admin-only so customers cannot mutate CMS media.
+    create: ({ req: { user } }) => Boolean(user),
     delete: adminOnly,
     read: () => true,
     update: adminOnly,
@@ -42,5 +44,7 @@ export const Media: CollectionConfig = {
   ],
   upload: {
     staticDir: path.resolve(dirname, '../../public/media'),
+    // Limit abuse surface now that any logged-in user can create media for reviews.
+    mimeTypes: ['image/*', 'video/*'],
   },
 }

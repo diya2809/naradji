@@ -6,11 +6,12 @@ import {
   RichText as RichTextWithoutBlocks,
 } from '@payloadcms/richtext-lexical/react'
 
-import { CodeBlock, CodeBlockProps } from '@/blocks/Code/Component'
+import { CodeBlock } from '@/blocks/Code/Component'
 
 import type {
   BannerBlock as BannerBlockProps,
   CallToActionBlock as CTABlockProps,
+  CodeBlock as CodeBlockProps,
   MediaBlock as MediaBlockProps,
 } from '@/payload-types'
 import { BannerBlock } from '@/blocks/Banner/Component'
@@ -55,7 +56,7 @@ export const RichText: React.FC<Props> = (props) => {
         {
           'container ': enableGutter,
           'max-w-none': !enableGutter,
-          'mx-auto prose md:prose-md dark:prose-invert ': enableProse,
+          'mx-auto prose md:prose-md dark:prose-invert hero-overlay:prose-invert': enableProse,
         },
         className,
       )}

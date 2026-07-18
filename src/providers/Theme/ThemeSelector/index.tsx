@@ -9,28 +9,23 @@ import {
 } from '@/components/ui/select'
 import React, { useState } from 'react'
 
-import type { Theme } from '../types'
+import type { ThemeSetting } from '../types'
 
 import { useTheme } from '..'
-import { themeLocalStorageKey } from '../shared'
+import { preferenceIsValid, themeLocalStorageKey } from '../shared'
 
 export const ThemeSelector: React.FC = () => {
   const { setTheme } = useTheme()
-  const [value, setValue] = useState('')
+  const [value, setValue] = useState<ThemeSetting>('light')
 
-  const onThemeChange = (themeToSet: Theme & 'auto') => {
-    if (themeToSet === 'auto') {
-      setTheme(null)
-      setValue('auto')
-    } else {
-      setTheme(themeToSet)
-      setValue(themeToSet)
-    }
+  const onThemeChange = (themeToSet: ThemeSetting) => {
+    setTheme(themeToSet)
+    setValue(themeToSet)
   }
 
   React.useEffect(() => {
     const preference = window.localStorage.getItem(themeLocalStorageKey)
-    setValue(preference ?? 'auto')
+    setValue(preferenceIsValid(preference) ? preference : 'light')
   }, [])
 
   return (

@@ -1,5 +1,3 @@
-'use client'
-
 import type { StaticImageData } from 'next/image'
 
 import { cn } from '@/utilities/cn'
@@ -19,15 +17,12 @@ export const Image: React.FC<MediaProps> = (props) => {
     height: heightFromProps,
     imgClassName,
     onClick,
-    onLoad: onLoadFromProps,
     priority,
     resource,
     size: sizeFromProps,
     src: srcFromProps,
     width: widthFromProps,
   } = props
-
-  const [isLoading, setIsLoading] = React.useState(true)
 
   let width: number | undefined | null
   let height: number | undefined | null
@@ -37,7 +32,6 @@ export const Image: React.FC<MediaProps> = (props) => {
   if (!src && resource && typeof resource === 'object') {
     const {
       alt: altFromResource,
-      filename: fullFilename,
       height: fullHeight,
       url,
       width: fullWidth,
@@ -46,37 +40,43 @@ export const Image: React.FC<MediaProps> = (props) => {
     width = widthFromProps ?? fullWidth
     height = heightFromProps ?? fullHeight
     alt = altFromResource
+    src = url || ''
 
-    const filename = fullFilename
-
-    src = `${process.env.NEXT_PUBLIC_SERVER_URL}${url}`
+    if (
+      process.env.NODE_ENV !== 'development' &&
+      resource.updatedAt &&
+      typeof src === 'string' &&
+      src.startsWith('/api/media/file/')
+    ) {
+      const cacheKey = new Date(resource.updatedAt).getTime()
+      src = `${src}${src.includes('?') ? '&' : '?'}v=${cacheKey}`
+    }
   }
 
-  // NOTE: this is used by the browser to determine which image to download at different screen sizes
-  const sizes = sizeFromProps
-    ? sizeFromProps
-    : Object.entries(breakpoints)
-        .map(([, value]) => `(max-width: ${value}px) ${value}px`)
-        .join(', ')
+  if (!src) return null
+
+  const isPayloadMedia = typeof src === 'string' && src.startsWith('/api/media/file/')
+
+  const sizes =
+    sizeFromProps ??
+    Object.entries(breakpoints)
+      .map(([, value]) => `(max-width: ${value}px) ${value}px`)
+      .join(', ')
 
   return (
     <NextImage
       alt={alt || ''}
       className={cn(imgClassName)}
       fill={fill}
-      height={!fill ? height || heightFromProps : undefined}
+      fetchPriority={priority ? 'high' : undefined}
+      height={!fill ? height || heightFromProps || undefined : undefined}
       onClick={onClick}
-      onLoad={() => {
-        setIsLoading(false)
-        if (typeof onLoadFromProps === 'function') {
-          onLoadFromProps()
-        }
-      }}
       priority={priority}
-      quality={90}
+      quality={priority ? 85 : 75}
       sizes={sizes}
       src={src}
-      width={!fill ? width || widthFromProps : undefined}
+      unoptimized={isPayloadMedia}
+      width={!fill ? width || widthFromProps || undefined : undefined}
     />
   )
 }

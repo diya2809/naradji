@@ -1,22 +1,22 @@
+import type { CodeBlock as CodeBlockProps } from '@/payload-types'
+
 import React from 'react'
 
-import { Code } from './Component.client'
+import { BlockWrapper } from '@/components/BlockWrapper'
 
-export type CodeBlockProps = {
-  code: string
-  language?: string
-  blockType: 'code'
-}
+import { Code } from './Component.client'
 
 export const CodeBlock: React.FC<
   CodeBlockProps & {
     id?: string | number
     className?: string
   }
-> = ({ className, code, language }) => {
+> = ({ className, code, language, mobileLayout, textAlign }) => {
   return (
-    <div className={[className, 'not-prose'].filter(Boolean).join(' ')}>
-      <Code code={code} language={language} />
-    </div>
+    <BlockWrapper mobileLayout={mobileLayout} narrow textAlign={textAlign}>
+      <div className={[className, 'not-prose'].filter(Boolean).join(' ')}>
+        <Code code={code} language={language ?? undefined} />
+      </div>
+    </BlockWrapper>
   )
 }

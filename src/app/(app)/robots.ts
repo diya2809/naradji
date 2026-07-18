@@ -1,9 +1,9 @@
-/* eslint-disable no-restricted-exports */
-const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-  ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-  : 'http://localhost:3000'
+import { getServerSideURL } from '@/utilities/getURL'
 
+/* eslint-disable no-restricted-exports */
 export default function robots() {
+  const baseUrl = getServerSideURL()
+
   return {
     host: baseUrl,
     rules: [

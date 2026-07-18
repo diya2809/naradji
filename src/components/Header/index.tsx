@@ -1,10 +1,10 @@
+import { getCategories } from '@/utilities/fetchCategories'
 import { getCachedGlobal } from '@/utilities/getGlobals'
 
-import './index.css'
 import { HeaderClient } from './index.client'
 
 export async function Header() {
-  const header = await getCachedGlobal('header', 1)()
+  const [header, categories] = await Promise.all([getCachedGlobal('header', 1)(), getCategories()])
 
-  return <HeaderClient header={header} />
+  return <HeaderClient categories={categories} header={header} />
 }

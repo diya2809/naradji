@@ -1,9 +1,11 @@
 import type { Block } from 'payload'
 
+import { blockTabs } from '@/fields/blockTabs'
+
 export const Code: Block = {
   slug: 'code',
   interfaceName: 'CodeBlock',
-  fields: [
+  fields: blockTabs([
     {
       name: 'language',
       type: 'select',
@@ -29,5 +31,5 @@ export const Code: Block = {
       label: false,
       required: true,
     },
-  ],
+  ]),
 }

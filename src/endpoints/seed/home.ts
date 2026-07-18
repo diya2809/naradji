@@ -1,619 +1,134 @@
-import type { Category, Media } from '@/payload-types'
+import type { Media } from '@/payload-types'
 import { RequiredDataFromCollectionSlug } from 'payload'
 
-type ProductArgs = {
+import { richText } from './richtext'
+
+type HomePageArgs = {
+  carouselImages: Media[]
+  featuredProductIds: [string, string, string]
+  heroImage: Media
   metaImage: Media
-  contentImage: Media
+  mobileHeroImage: Media
 }
 
-export const homePageData: (args: ProductArgs) => RequiredDataFromCollectionSlug<'pages'> = ({
+export const homePageData: (args: HomePageArgs) => RequiredDataFromCollectionSlug<'pages'> = ({
+  carouselImages,
+  featuredProductIds,
+  heroImage,
   metaImage,
-  contentImage,
+  mobileHeroImage,
 }) => {
+  const [cardOne, cardTwo, cardThree] = carouselImages
+
   return {
     slug: 'home',
+    title: 'Home',
     _status: 'published',
     hero: {
-      type: 'lowImpact',
-      links: [
-        {
-          link: {
-            type: 'custom',
-            appearance: 'default',
-            label: 'All products',
-            url: '/search',
-          },
-        },
-        {
-          link: {
-            type: 'custom',
-            appearance: 'outline',
-            label: 'Contact',
-            url: '/contact',
-          },
-        },
-      ],
-      richText: {
-        root: {
-          type: 'root',
-          children: [
-            {
-              type: 'heading',
-              children: [
-                {
-                  type: 'text',
-                  detail: 0,
-                  format: 0,
-                  mode: 'normal',
-                  style: '',
-                  text: 'Payload Ecommerce Template',
-                  version: 1,
-                },
-              ],
-              direction: 'ltr',
-              format: '',
-              indent: 0,
-              tag: 'h1',
-              version: 1,
-            },
-            {
-              type: 'paragraph',
-              children: [
-                {
-                  type: 'link',
-                  children: [
-                    {
-                      type: 'text',
-                      detail: 0,
-                      format: 0,
-                      mode: 'normal',
-                      style: '',
-                      text: 'Visit the admin dashboard',
-                      version: 1,
-                    },
-                  ],
-                  direction: 'ltr',
-                  fields: {
-                    linkType: 'custom',
-                    newTab: false,
-                    url: '/admin',
-                  },
-                  format: '',
-                  indent: 0,
-                  version: 3,
-                },
-                {
-                  type: 'text',
-                  detail: 0,
-                  format: 0,
-                  mode: 'normal',
-                  style: '',
-                  text: " to begin managing this site's content. The code for this template is completely open-source and can be found ",
-                  version: 1,
-                },
-                {
-                  type: 'link',
-                  children: [
-                    {
-                      type: 'text',
-                      detail: 0,
-                      format: 0,
-                      mode: 'normal',
-                      style: '',
-                      text: 'on our Github',
-                      version: 1,
-                    },
-                  ],
-                  direction: 'ltr',
-                  fields: {
-                    linkType: 'custom',
-                    newTab: true,
-                    url: 'https://github.com/payloadcms/payload/tree/3.x/templates/ecommerce',
-                  },
-                  format: '',
-                  indent: 0,
-                  version: 3,
-                },
-                {
-                  type: 'text',
-                  detail: 0,
-                  format: 0,
-                  mode: 'normal',
-                  style: '',
-                  text: '. ',
-                  version: 1,
-                },
-              ],
-              direction: 'ltr',
-              format: '',
-              indent: 0,
-              textFormat: 0,
-              version: 1,
-            },
-          ],
-          direction: 'ltr',
-          format: '',
-          indent: 0,
-          version: 1,
-        },
+      type: 'highImpact',
+      media: heroImage.id,
+      mobileMedia: mobileHeroImage.id,
+      clickLink: {
+        type: 'custom',
+        url: '/shop',
       },
+      links: [],
+      richText: null,
     },
     layout: [
       {
-        blockName: 'Content Block',
-        blockType: 'content',
-        columns: [
+        blockType: 'appleCardsCarousel',
+        heading: 'Kitchen staples, ready to order',
+        cards: [
           {
-            richText: {
-              root: {
-                type: 'root',
-                children: [
-                  {
-                    type: 'heading',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'Core features',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    tag: 'h2',
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                version: 1,
-              },
-            },
-            size: 'full',
+            category: 'Dairy',
+            title: 'Fresh milk & more',
+            image: cardOne?.id ?? heroImage.id,
+            mobileImage: mobileHeroImage.id,
           },
           {
-            enableLink: false,
-            richText: {
-              root: {
-                type: 'root',
-                children: [
-                  {
-                    type: 'heading',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'Admin Dashboard',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    tag: 'h3',
-                    version: 1,
-                  },
-                  {
-                    type: 'paragraph',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: "Manage this site's pages and products from the ",
-                        version: 1,
-                      },
-                      {
-                        type: 'link',
-                        children: [
-                          {
-                            type: 'text',
-                            detail: 0,
-                            format: 0,
-                            mode: 'normal',
-                            style: '',
-                            text: 'admin dashboard',
-                            version: 1,
-                          },
-                        ],
-                        direction: 'ltr',
-                        fields: {
-                          linkType: 'custom',
-                          newTab: false,
-                          url: '/admin',
-                        },
-                        format: '',
-                        indent: 0,
-                        version: 2,
-                      },
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: '.',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    textFormat: 0,
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                version: 1,
-              },
-            },
-            size: 'oneThird',
+            category: 'Atta & grains',
+            title: 'Daily cooking essentials',
+            image: cardTwo?.id ?? heroImage.id,
           },
           {
-            enableLink: false,
-            richText: {
-              root: {
-                type: 'root',
-                children: [
-                  {
-                    type: 'heading',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'Preview',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    tag: 'h3',
-                    version: 1,
-                  },
-                  {
-                    type: 'paragraph',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'Using versions, drafts, and preview, editors can review and share their changes before publishing them.',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    textFormat: 0,
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                version: 1,
-              },
-            },
-            size: 'oneThird',
+            category: 'Tea & coffee',
+            title: 'Chai time favourites',
+            image: cardThree?.id ?? heroImage.id,
           },
           {
-            enableLink: false,
-            richText: {
-              root: {
-                type: 'root',
-                children: [
-                  {
-                    type: 'heading',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'Page Builder',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    tag: 'h3',
-                    version: 1,
-                  },
-                  {
-                    type: 'paragraph',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'Custom page builder allows you to create unique page and product layouts for any type of content.',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    textFormat: 0,
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                version: 1,
-              },
-            },
-            size: 'oneThird',
-          },
-          {
-            enableLink: false,
-            richText: {
-              root: {
-                type: 'root',
-                children: [
-                  {
-                    type: 'heading',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'SEO',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    tag: 'h3',
-                    version: 1,
-                  },
-                  {
-                    type: 'paragraph',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'Editors have complete control over SEO data and site content directly from the ',
-                        version: 1,
-                      },
-                      {
-                        type: 'link',
-                        children: [
-                          {
-                            type: 'text',
-                            detail: 0,
-                            format: 0,
-                            mode: 'normal',
-                            style: '',
-                            text: 'admin dashboard',
-                            version: 1,
-                          },
-                        ],
-                        direction: 'ltr',
-                        fields: {
-                          linkType: 'custom',
-                          newTab: false,
-                          url: '/admin',
-                        },
-                        format: '',
-                        indent: 0,
-                        version: 2,
-                      },
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: '.',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    textFormat: 0,
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                version: 1,
-              },
-            },
-            size: 'oneThird',
-          },
-          {
-            enableLink: false,
-            richText: {
-              root: {
-                type: 'root',
-                children: [
-                  {
-                    type: 'heading',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'Dark Mode',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    tag: 'h3',
-                    version: 1,
-                  },
-                  {
-                    type: 'paragraph',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'Users will experience this site in their preferred color scheme and each block can be inverted.',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    format: '',
-                    indent: 0,
-                    textFormat: 0,
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                version: 1,
-              },
-            },
-            size: 'oneThird',
+            category: 'Snacks',
+            title: 'Quick munchies',
+            image: cardOne?.id ?? heroImage.id,
           },
         ],
       },
       {
-        blockName: 'Media Block',
-        blockType: 'mediaBlock',
-        media: contentImage,
+        blockType: 'threeItemGrid',
+        heading: 'Popular right now',
+        products: featuredProductIds,
       },
       {
-        blockName: 'CTA',
-        blockType: 'cta',
-        links: [
+        blockType: 'carousel',
+        heading: 'More from the kirana',
+        populateBy: 'collection',
+        relationTo: 'products',
+        limit: 8,
+      },
+      {
+        blockType: 'reviews',
+        headline: 'What shoppers say',
+        reviews: [
           {
-            link: {
-              type: 'custom',
-              appearance: 'default',
-              label: 'All products',
-              url: '/products',
-            },
+            author: 'Priya S.',
+            text: 'Bol ke order ho gaya — atta, doodh, chai. COD pe haan pakka, bilkul simple.',
+            rating: 5,
+          },
+          {
+            author: 'Ravi M.',
+            text: 'Voice se cart banaya, prices clear the. Delivery pe paisa — no app hopping.',
+            rating: 5,
+          },
+          {
+            author: 'Meera K.',
+            text: 'Gujarat-style Hinglish mein samajh gaya. Kirana list ek baar mein done.',
+            rating: 5,
           },
         ],
-        richText: {
-          root: {
-            type: 'root',
-            children: [
-              {
-                type: 'heading',
-                children: [
-                  {
-                    type: 'text',
-                    detail: 0,
-                    format: 0,
-                    mode: 'normal',
-                    style: '',
-                    text: 'This is a call to action',
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                tag: 'h3',
-                version: 1,
-              },
-              {
-                type: 'paragraph',
-                children: [
-                  {
-                    type: 'text',
-                    detail: 0,
-                    format: 0,
-                    mode: 'normal',
-                    style: '',
-                    text: 'This is a custom layout building block ',
-                    version: 1,
-                  },
-                  {
-                    type: 'link',
-                    children: [
-                      {
-                        type: 'text',
-                        detail: 0,
-                        format: 0,
-                        mode: 'normal',
-                        style: '',
-                        text: 'configured in the admin dashboard',
-                        version: 1,
-                      },
-                    ],
-                    direction: 'ltr',
-                    fields: {
-                      linkType: 'custom',
-                      newTab: false,
-                      url: '/admin',
-                    },
-                    format: '',
-                    indent: 0,
-                    version: 2,
-                  },
-                  {
-                    type: 'text',
-                    detail: 0,
-                    format: 0,
-                    mode: 'normal',
-                    style: '',
-                    text: '.',
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                textFormat: 0,
-                version: 1,
-              },
-            ],
-            direction: 'ltr',
-            format: '',
-            indent: 0,
-            version: 1,
+      },
+      {
+        blockType: 'faq',
+        headline: 'Questions, answered',
+        items: [
+          {
+            question: 'Can I order by voice?',
+            answer: richText(
+              'Yes. Hold the mic and speak in Hindi, Hinglish, or Gujarati. Say items like atta, doodh, chai — then confirm with “haan pakka”.',
+            ),
           },
-        },
+          {
+            question: 'Do you support Cash on Delivery?',
+            answer: richText(
+              'Yes. Say COD while ordering, then confirm with “haan pakka” to place the order.',
+            ),
+          },
+          {
+            question: 'Do you ship across India?',
+            answer: richText(
+              'Yes. Shipping is calculated at checkout. Free shipping on orders over ₹1,999.',
+            ),
+          },
+          {
+            question: 'How long does delivery take?',
+            answer: richText('Standard grocery orders typically ship in 2–4 business days.'),
+          },
+        ],
       },
     ],
     meta: {
-      description: 'An open-source ecommerce site built with Payload and Next.js.',
-      // @ts-ignore
+      title: 'Naradji — voice grocery',
+      description: 'Speak your kirana list. Order with COD. Haan pakka.',
       image: metaImage,
-      title: 'Payload Ecommerce Template',
     },
-    title: 'Home',
   }
 }

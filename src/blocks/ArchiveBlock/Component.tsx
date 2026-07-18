@@ -1,11 +1,16 @@
-import type { Product, ArchiveBlock as ArchiveBlockProps } from '@/payload-types'
+import type { ArchiveBlock as ArchiveBlockProps } from '@/payload-types'
+import type { ListingProduct } from '@/types/storefront'
 
-import configPromise from '@payload-config'
-import { DefaultDocumentIDType, getPayload } from 'payload'
-import React from 'react'
-import { RichText } from '@/components/RichText'
-
+import { BlockWrapper } from '@/components/BlockWrapper'
 import { CollectionArchive } from '@/components/CollectionArchive'
+import { RichText } from '@/components/RichText'
+import {
+  fetchProductsByCategories,
+  flattenCategoryIds,
+  resolveSelectedProductDocs,
+} from '@/utilities/fetchProductsByCategories'
+import { DefaultDocumentIDType } from 'payload'
+import React from 'react'
 
 export const ArchiveBlock: React.FC<
   ArchiveBlockProps & {
@@ -13,54 +18,38 @@ export const ArchiveBlock: React.FC<
     className?: string
   }
 > = async (props) => {
-  const { id, categories, introContent, limit: limitFromProps, populateBy, selectedDocs } = props
+  const {
+    categories,
+    id,
+    introContent,
+    limit: limitFromProps,
+    mobileLayout,
+    populateBy,
+    selectedDocs,
+    textAlign,
+  } = props
 
   const limit = limitFromProps || 3
 
-  let posts: Product[] = []
+  let posts: ListingProduct[] = []
 
   if (populateBy === 'collection') {
-    const payload = await getPayload({ config: configPromise })
-
-    const flattenedCategories = categories?.map((category) => {
-      if (typeof category === 'object') return category.id
-      else return category
-    })
-
-    const fetchedProducts = await payload.find({
-      collection: 'products',
-      depth: 1,
+    posts = await fetchProductsByCategories({
+      categoryIds: flattenCategoryIds(categories),
       limit,
-      ...(flattenedCategories && flattenedCategories.length > 0
-        ? {
-            where: {
-              categories: {
-                in: flattenedCategories,
-              },
-            },
-          }
-        : {}),
     })
-
-    posts = fetchedProducts.docs
   } else {
-    if (selectedDocs?.length) {
-      const filteredSelectedPosts = selectedDocs.map((post) => {
-        if (typeof post.value === 'object') return post.value
-      }) as Product[]
-
-      posts = filteredSelectedPosts
-    }
+    posts = resolveSelectedProductDocs(selectedDocs)
   }
 
   return (
-    <div className="my-16" id={`block-${id}`}>
-      {introContent && (
-        <div className="container mb-16">
-          <RichText className="ml-0 max-w-3xl" data={introContent} enableGutter={false} />
+    <BlockWrapper id={id ? `block-${id}` : undefined} mobileLayout={mobileLayout} textAlign={textAlign}>
+      {introContent ? (
+        <div className="mb-8 max-w-3xl">
+          <RichText className="ml-0" data={introContent} enableGutter={false} />
         </div>
-      )}
+      ) : null}
       <CollectionArchive posts={posts} />
-    </div>
+    </BlockWrapper>
   )
 }

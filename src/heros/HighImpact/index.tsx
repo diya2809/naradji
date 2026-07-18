@@ -1,46 +1,64 @@
-'use client'
-import { useHeaderTheme } from '@/providers/HeaderTheme'
-import React, { useEffect } from 'react'
+import React from 'react'
 
 import type { Page } from '@/payload-types'
 
 import { CMSLink } from '@/components/Link'
-import { Media } from '@/components/Media'
+import { ResponsiveMedia } from '@/components/Media/ResponsiveMedia'
 import { RichText } from '@/components/RichText'
+import { HeroClickOverlay, getHeroClickLink, getHeroLinkLabel } from '@/heros/HeroClickOverlay'
+import { cn } from '@/utilities/cn'
+import { getCMSLinkHref } from '@/utilities/getCMSLinkHref'
+import { siteLayoutVars } from '@/utilities/siteLayout'
 
-export const HighImpactHero: React.FC<Page['hero']> = ({ links, media, richText }) => {
-  const { setHeaderTheme } = useHeaderTheme()
-
-  useEffect(() => {
-    setHeaderTheme('dark')
-  })
+export const HighImpactHero: React.FC<Page['hero']> = (props) => {
+  const { links, media, mobileMedia, richText } = props
+  const clickLink = getHeroClickLink(props)
+  const isClickable = Boolean(getCMSLinkHref(clickLink))
 
   return (
-    <div
-      className="relative -mt-[10.4rem] flex items-center justify-center text-white"
-      data-theme="dark"
+    <section
+      className={cn(
+        'relative isolate w-full overflow-hidden text-foreground',
+        isClickable && 'cursor-pointer',
+      )}
+      data-hero-overlay
+      style={{ minHeight: siteLayoutVars.heroMinHeight }}
     >
-      <div className="container mb-8 z-10 relative flex items-center justify-center">
-        <div className="max-w-146 md:text-center">
-          {richText && <RichText className="mb-6" data={richText} enableGutter={false} />}
-          {Array.isArray(links) && links.length > 0 && (
-            <ul className="flex md:justify-center gap-4">
-              {links.map(({ link }, i) => {
-                return (
-                  <li key={i}>
-                    <CMSLink {...link} />
-                  </li>
-                )
-              })}
+      <div aria-hidden className="absolute inset-0 z-0 select-none">
+        {media && typeof media === 'object' ? (
+          <ResponsiveMedia
+            desktop={media}
+            fill
+            imgClassName="object-cover object-center"
+            mobile={mobileMedia}
+            priority
+            size="100vw"
+            videoClassName="h-full w-full object-cover"
+          />
+        ) : null}
+      </div>
+
+      <HeroClickOverlay ariaLabel={getHeroLinkLabel(clickLink)} link={clickLink} />
+
+      <div
+        className="pointer-events-none relative z-10 container flex flex-col justify-end pb-12"
+        style={{ minHeight: siteLayoutVars.heroMinHeight }}
+      >
+        <div>
+          {richText ? (
+            <RichText className="hero-headline mb-5 ms-0 text-left" data={richText} enableGutter={false} />
+          ) : null}
+          {Array.isArray(links) && links.length > 0 ? (
+            <ul className="pointer-events-auto flex flex-wrap gap-3">
+              {links.map(({ link }, index) => (
+                <li className="w-auto" key={index}>
+                  <CMSLink className="w-auto" {...link} />
+                </li>
+              ))}
             </ul>
-          )}
+          ) : null}
         </div>
       </div>
-      <div className="min-h-[80vh] select-none">
-        {media && typeof media === 'object' && (
-          <Media fill imgClassName="-z-10 object-cover" priority resource={media} />
-        )}
-      </div>
-    </div>
+    </section>
   )
 }

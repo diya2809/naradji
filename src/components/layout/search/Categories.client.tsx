@@ -1,12 +1,12 @@
 'use client'
 import React, { useCallback, useMemo } from 'react'
 
-import { Category } from '@/payload-types'
+import type { CategoryListItem } from '@/types/storefront'
 import { usePathname, useSearchParams, useRouter } from 'next/navigation'
-import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 
 type Props = {
-  category: Category
+  category: CategoryListItem
 }
 
 export const CategoryItem: React.FC<Props> = ({ category }) => {
@@ -33,13 +33,13 @@ export const CategoryItem: React.FC<Props> = ({ category }) => {
   }, [category.id, isActive, pathname, router, searchParams])
 
   return (
-    <button
+    <Button
       onClick={() => setQuery()}
-      className={clsx('hover:cursor-pointer', {
-        ' underline': isActive,
-      })}
+      variant={isActive ? 'default' : 'ghost'}
+      size="sm"
+      className="justify-start"
     >
       {category.title}
-    </button>
+    </Button>
   )
 }

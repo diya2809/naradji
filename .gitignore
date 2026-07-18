@@ -54,3 +54,5 @@ CLAUDE.md
 
 # Local agent memory
 memory/
+.gstack/
+/examples

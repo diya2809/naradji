@@ -4,6 +4,7 @@ import { MediaBlock } from '@/blocks/MediaBlock/config'
 import { slugField } from 'payload'
 import { generatePreviewPath } from '@/utilities/generatePreviewPath'
 import { CollectionOverride } from '@payloadcms/plugin-ecommerce/types'
+import { revalidateProduct, revalidateProductDelete } from '@/collections/hooks/revalidateProduct'
 import {
   MetaDescriptionField,
   MetaImageField,
@@ -22,6 +23,15 @@ import { DefaultDocumentIDType, Where } from 'payload'
 
 export const ProductsCollection: CollectionOverride = ({ defaultCollection }) => ({
   ...defaultCollection,
+  access: {
+    ...defaultCollection?.access,
+    read: () => true,
+  },
+  hooks: {
+    ...defaultCollection?.hooks,
+    afterChange: [...(defaultCollection?.hooks?.afterChange ?? []), revalidateProduct],
+    afterDelete: [...(defaultCollection?.hooks?.afterDelete ?? []), revalidateProductDelete],
+  },
   admin: {
     ...defaultCollection?.admin,
     defaultColumns: ['title', 'enableVariants', '_status', 'variants.variants'],
@@ -45,11 +55,14 @@ export const ProductsCollection: CollectionOverride = ({ defaultCollection }) =>
     ...defaultCollection?.defaultPopulate,
     title: true,
     slug: true,
+    description: true,
     variantOptions: true,
     variants: true,
     enableVariants: true,
     gallery: true,
-    priceInUSD: true,
+    variantTypes: true,
+    priceInINR: true,
+    compareAtPriceInINR: true,
     inventory: true,
     meta: true,
   },
@@ -97,14 +110,35 @@ export const ProductsCollection: CollectionOverride = ({ defaultCollection }) =>
                       return data?.enableVariants === true && data?.variantTypes?.length > 0
                     },
                   },
-                  filterOptions: ({ data }) => {
+                  filterOptions: ({ data, req }) => {
+                    if (req?.context?.skipVariantOptionFilterOptions) {
+                      return {
+                        id: {
+                          exists: true,
+                        },
+                      }
+                    }
+
                     if (data?.enableVariants && data?.variantTypes?.length) {
-                      const variantTypeIDs = data.variantTypes.map((item: any) => {
-                        if (typeof item === 'object' && item?.id) {
-                          return item.id
-                        }
-                        return item
-                      }) as DefaultDocumentIDType[]
+                      const variantTypeIDs = data.variantTypes
+                        .map((item: any) => {
+                          if (item && typeof item === 'object') {
+                            if ('id' in item && item.id) {
+                              return item.id
+                            }
+
+                            if ('value' in item && item.value) {
+                              if (item.value && typeof item.value === 'object' && 'id' in item.value) {
+                                return item.value.id
+                              }
+
+                              return item.value
+                            }
+                          }
+
+                          return item
+                        })
+                        .filter(Boolean) as DefaultDocumentIDType[]
 
                       if (variantTypeIDs.length === 0)
                         return {
@@ -143,6 +177,16 @@ export const ProductsCollection: CollectionOverride = ({ defaultCollection }) =>
         {
           fields: [
             ...defaultCollection.fields,
+            {
+              name: 'compareAtPriceInINR',
+              type: 'number',
+              label: 'Compare at price (₹)',
+              admin: {
+                description:
+                  'Original MRP. Shown struck through on product cards when higher than the sale price.',
+                condition: (data) => !data?.enableVariants,
+              },
+            },
             {
               name: 'relatedProducts',
               type: 'relationship',
@@ -212,14 +256,15 @@ export const ProductsCollection: CollectionOverride = ({ defaultCollection }) =>
       type: 'text',
       admin: {
         position: 'sidebar',
-        description: 'Display unit (kg, dozen, pack…)',
+        description: 'Sell unit for voice cart (pack, kg, litre, dozen, …)',
       },
     },
     {
       name: 'aliases',
       type: 'array',
       admin: {
-        description: 'Voice aliases (Hinglish / Gujarati / Hindi) for STT matching',
+        position: 'sidebar',
+        description: 'Speech aliases for Naradji STT matching (Hinglish / Hindi / Gujarati)',
       },
       fields: [
         {

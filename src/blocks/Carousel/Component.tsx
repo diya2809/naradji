@@ -1,7 +1,15 @@
-import type { Product, CarouselBlock as CarouselBlockProps } from '@/payload-types'
+import type { CarouselBlock as CarouselBlockProps } from '@/payload-types'
+import type { ListingProduct } from '@/types/storefront'
 
-import configPromise from '@payload-config'
-import { DefaultDocumentIDType, getPayload } from 'payload'
+import { BlockSectionHeading } from '@/components/BlockSectionHeading'
+import { BlockWrapper } from '@/components/BlockWrapper'
+import {
+  fetchProductsByCategories,
+  flattenCategoryIds,
+  resolveSelectedProductDocs,
+} from '@/utilities/fetchProductsByCategories'
+import { fetchListingProducts } from '@/utilities/fetchListingProducts'
+import { DefaultDocumentIDType } from 'payload'
 import React from 'react'
 
 import { CarouselClient } from './Component.client'
@@ -11,47 +19,35 @@ export const CarouselBlock: React.FC<
     id?: DefaultDocumentIDType
   }
 > = async (props) => {
-  const { id, categories, limit = 3, populateBy, selectedDocs } = props
+  const { categories, heading, limit = 3, mobileLayout, populateBy, selectedDocs, textAlign } = props
 
-  let products: Product[] = []
+  let products: ListingProduct[] = []
 
   if (populateBy === 'collection') {
-    const payload = await getPayload({ config: configPromise })
-
-    const flattenedCategories = categories?.length
-      ? categories.map((category) => {
-          if (typeof category === 'object') return category.id
-          else return category
-        })
-      : null
-
-    const fetchedProducts = await payload.find({
-      collection: 'products',
-      depth: 1,
+    products = await fetchProductsByCategories({
+      categoryIds: flattenCategoryIds(categories),
       limit: limit || undefined,
-      ...(flattenedCategories && flattenedCategories.length > 0
-        ? {
-            where: {
-              categories: {
-                in: flattenedCategories,
-              },
-            },
-          }
-        : {}),
     })
-
-    products = fetchedProducts.docs
   } else if (selectedDocs?.length) {
-    products = selectedDocs.map((post) => {
-      if (typeof post.value !== 'string') return post.value
-    }) as Product[]
+    const populated = resolveSelectedProductDocs(selectedDocs)
+
+    if (populated.length) {
+      products = populated
+    } else {
+      const ids = selectedDocs
+        .map((doc) => (typeof doc.value === 'string' ? doc.value : null))
+        .filter((id): id is DefaultDocumentIDType => id !== null)
+
+      products = await fetchListingProducts(ids)
+    }
   }
 
   if (!products?.length) return null
 
   return (
-    <div className=" w-full pb-6 pt-1">
+    <BlockWrapper mobileLayout={mobileLayout} textAlign={textAlign}>
+      <BlockSectionHeading className="mb-6" title={heading || 'More to love'} />
       <CarouselClient products={products} />
-    </div>
+    </BlockWrapper>
   )
 }

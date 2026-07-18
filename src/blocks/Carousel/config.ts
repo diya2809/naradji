@@ -1,8 +1,15 @@
 import type { Block } from 'payload'
 
+import { blockTabs } from '@/fields/blockTabs'
+
 export const Carousel: Block = {
   slug: 'carousel',
-  fields: [
+  fields: blockTabs([
+    {
+      name: 'heading',
+      type: 'text',
+      label: 'Heading',
+    },
     {
       name: 'populateBy',
       type: 'select',
@@ -86,7 +93,7 @@ export const Carousel: Block = {
       },
       label: 'Populated Docs Total',
     },
-  ],
+  ]),
   interfaceName: 'CarouselBlock',
   labels: {
     plural: 'Carousels',

@@ -1,89 +1,58 @@
 'use client'
 
-import type { PayloadAdminBarProps } from '@payloadcms/admin-bar'
-
 import { cn } from '@/utilities/cn'
-import { useSelectedLayoutSegments } from 'next/navigation'
-import { PayloadAdminBar } from '@payloadcms/admin-bar'
+import { fetchSessionUser } from '@/utilities/fetchSessionUser'
+import Link from 'next/link'
 import React, { useEffect, useState } from 'react'
-import { User } from '@/payload-types'
-
-const collectionLabels = {
-  pages: {
-    plural: 'Pages',
-    singular: 'Page',
-  },
-  posts: {
-    plural: 'Posts',
-    singular: 'Post',
-  },
-  projects: {
-    plural: 'Projects',
-    singular: 'Project',
-  },
-}
+import type { User } from '@/payload-types'
 
 const Title: React.FC = () => <span>Dashboard</span>
 
-export const AdminBar: React.FC<{
-  adminBarProps?: PayloadAdminBarProps
-}> = (props) => {
-  const { adminBarProps } = props || {}
-  const segments = useSelectedLayoutSegments()
-  const [show, setShow] = useState(false)
-  // Client-only mount — PayloadAdminBar auth callback differs SSR vs client (hydration).
-  const [mounted, setMounted] = useState(false)
+/**
+ * Admin-only toolbar using the shared deduped session fetch.
+ * PayloadAdminBar always performs its own /me request and cannot be bypassed.
+ */
+export const AdminBar: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null)
+
   useEffect(() => {
-    setMounted(true)
-  }, [])
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore - todo fix, not sure why this is erroring
-  const collection = collectionLabels?.[segments?.[1]] ? segments?.[1] : 'pages'
-
-  const onAuthChange = React.useCallback((user: User) => {
-    const canSeeAdmin = user?.roles && Array.isArray(user?.roles) && user?.roles?.includes('admin')
-
-    setShow(Boolean(canSeeAdmin))
+    void fetchSessionUser().then((sessionUser) => {
+      setUser(sessionUser)
+    })
   }, [])
 
-  if (!mounted) return null
+  const isAdmin = Boolean(user?.roles?.includes('admin'))
+
+  if (!isAdmin || !user) {
+    return null
+  }
+
+  const cmsURL = process.env.NEXT_PUBLIC_SERVER_URL
 
   return (
-    <div
-      className={cn('py-2 bg-black text-white', {
-        block: show,
-        hidden: !show,
-      })}
-    >
-      <div className="container">
-        <PayloadAdminBar
-          {...adminBarProps}
-          className="py-2 text-white"
-          classNames={{
-            controls: 'font-medium text-white',
-            logo: 'text-white',
-            user: 'text-white',
-          }}
-          cmsURL={process.env.NEXT_PUBLIC_SERVER_URL}
-          collectionLabels={{
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore - todo fix, not sure why this is erroring
-            plural: collectionLabels[collection]?.plural || 'Pages',
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore - todo fix, not sure why this is erroring
-            singular: collectionLabels[collection]?.singular || 'Page',
-          }}
-          logo={<Title />}
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore - todo fix, not sure why this is erroring
-          onAuthChange={onAuthChange}
-          style={{
-            backgroundColor: 'transparent',
-            padding: 0,
-            position: 'relative',
-            zIndex: 'unset',
-          }}
-        />
+    <div className={cn('bg-primary py-2 text-primary-foreground', 'block')}>
+      <div className="container flex items-center justify-between gap-3 text-sm">
+        <Link className="font-medium text-primary-foreground hover:underline" href={`${cmsURL}/admin`}>
+          <Title />
+        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            className="text-primary-foreground hover:underline"
+            href={`${cmsURL}/admin/collections/users/${user.id}`}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            {user.email}
+          </Link>
+          <Link
+            className="text-primary-foreground hover:underline"
+            href={`${cmsURL}/admin/logout`}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Logout
+          </Link>
+        </div>
       </div>
     </div>
   )

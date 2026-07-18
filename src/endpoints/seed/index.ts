@@ -1,21 +1,17 @@
-import type { CollectionSlug, GlobalSlug, Payload, PayloadRequest, File } from 'payload'
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import type { CollectionSlug, Payload, PayloadRequest, File, RequiredDataFromCollectionSlug } from 'payload'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { contactFormData } from './contact-form'
 import { contactPageData } from './contact-page'
-import { productHatData } from './product-hat'
-import { productTshirtData, productTshirtVariant } from './product-tshirt'
+import { footerSeedPages } from './footer-pages'
 import { homePageData } from './home'
-import { imageHatData } from './image-hat'
-import { imageTshirtBlackData } from './image-tshirt-black'
-import { imageTshirtWhiteData } from './image-tshirt-white'
 import { imageHero1Data } from './image-hero-1'
-import { Address, Transaction, VariantOption } from '@/payload-types'
-import { FALLBACK_CATALOG } from '@/lib/naradji/catalog'
-
-const seedDir = path.dirname(fileURLToPath(import.meta.url))
+import { imageMobileHeroData } from './image-mobile-hero'
+import { seedSellerCatalog } from './seller-catalog'
+import { rupeesToMinor } from '@/lib/currency'
+import type { Address, Form, Media, Product, Transaction, Header } from '@/payload-types'
 
 const collections: CollectionSlug[] = [
   'categories',
@@ -33,45 +29,30 @@ const collections: CollectionSlug[] = [
   'orders',
 ]
 
-const categories = ['Accessories', 'T-Shirts', 'Hats']
+const filename = fileURLToPath(import.meta.url)
+const dirname = path.dirname(filename)
 
-const sizeVariantOptions = [
-  { label: 'Small', value: 'small' },
-  { label: 'Medium', value: 'medium' },
-  { label: 'Large', value: 'large' },
-  { label: 'X Large', value: 'xlarge' },
-]
+const heroDesktopImageFileName = 'hero-laptop.png'
+const heroMobileImageFileName = 'hero-mobile.png'
 
-const colorVariantOptions = [
-  { label: 'Black', value: 'black' },
-  { label: 'White', value: 'white' },
-]
-
-const globals: GlobalSlug[] = ['header', 'footer']
-
-const baseAddressUSData: Transaction['billingAddress'] = {
-  title: 'Dr.',
-  firstName: 'Otto',
-  lastName: 'Octavius',
-  phone: '1234567890',
-  company: 'Oscorp',
-  addressLine1: '123 Main St',
-  addressLine2: 'Suite 100',
-  city: 'New York',
-  state: 'NY',
-  postalCode: '10001',
-  country: 'US',
+function seedImagePath(fileName: string): string {
+  return path.resolve(dirname, fileName)
 }
 
-const baseAddressUKData: Transaction['billingAddress'] = {
-  title: 'Mr.',
-  firstName: 'Oliver',
-  lastName: 'Twist',
-  phone: '1234567890',
-  addressLine1: '48 Great Portland St',
-  city: 'London',
-  postalCode: 'W1W 7ND',
-  country: 'GB',
+async function fetchSeedImage(fileName: string): Promise<File> {
+  return fetchFileFromPath(seedImagePath(fileName))
+}
+
+const baseAddressData: Transaction['billingAddress'] = {
+  name: 'Seed Customer',
+  phone: '9876543210',
+  alternatePhone: null,
+  addressLine1: 'Flat 2, Casa Branca',
+  addressLine2: 'Near Anjuna Beach, Bardez',
+  city: 'Panaji',
+  state: 'Goa',
+  postalCode: '403001',
+  country: 'IN',
 }
 
 // Next.js revalidation errors are normal when seeding the database without a server running
@@ -87,373 +68,317 @@ export const seed = async ({
 }): Promise<void> => {
   payload.logger.info('Seeding database...')
 
-  // IMPORTANT: do NOT pass `req` into deleteMany/create during seed.
-  // createLocalReq + Mongo Atlas transactions make filterOptions on
-  // products.gallery.variantOption fail with NoSuchTransaction →
-  // "invalid selections" on the t-shirt product (admin Seed button 500).
-  void req
-
-  // Always disable Next revalidate — seed runs outside / inside request;
-  // revalidatePath throws "static generation store missing" when offline.
-  const seedContext = { disableRevalidate: true }
-  const create = ((args: Parameters<Payload['create']>[0]) =>
-    payload.create({
-      ...args,
-      depth: args.depth ?? 0,
-      context: { ...args.context, ...seedContext },
-    })) as Payload['create']
-  const update = ((args: Parameters<Payload['update']>[0]) =>
-    payload.update({
-      ...args,
-      depth: 'depth' in args ? args.depth : 0,
-      context: { ...args.context, ...seedContext },
-    })) as Payload['update']
-  const del = ((args: Parameters<Payload['delete']>[0]) =>
-    payload.delete({
-      ...args,
-      depth: args.depth ?? 0,
-      context: { ...args.context, ...seedContext },
-    })) as Payload['delete']
-  const updateGlobal = ((args: Parameters<Payload['updateGlobal']>[0]) =>
-    payload.updateGlobal({
-      ...args,
-      depth: args.depth ?? 0,
-      context: { ...args.context, ...seedContext },
-    })) as Payload['updateGlobal']
-
-  // we need to clear the media directory before seeding
-  // as well as the collections and globals
-  // this is because while `yarn seed` drops the database
-  // the custom `/api/seed` endpoint does not
-  payload.logger.info(`— Clearing collections and globals...`)
-
-  // clear the database
-  await Promise.all(
-    globals.map((global) =>
-      updateGlobal({
-        slug: global,
-        data: {
-          navItems: [],
-        },
-      }),
-    ),
-  )
-
-  for (const collection of collections) {
-    await payload.db.deleteMany({ collection, where: {} })
-    if (payload.collections[collection].config.versions) {
-      await payload.db.deleteVersions({ collection, where: {} })
-    }
+  // Relationship filterOptions callbacks read req.context directly.
+  // Set this once for the whole seed request so nested validations can bypass
+  // variantOption filtering safely during bootstrap data creation.
+  req.context = {
+    ...(req.context ?? {}),
+    disableRevalidate: true,
+    skipVariantOptionFilterOptions: true,
   }
 
-  payload.logger.info(`— Seeding customer and customer data...`)
+  const create = async <T extends CollectionSlug>(args: {
+    collection: T
+    data: RequiredDataFromCollectionSlug<T>
+    depth?: number
+    file?: File
+  }): Promise<any> => {
+    const { collection, data, depth, file } = args
+    let existingDoc: any = null
 
-  await del({
-    collection: 'users',
-    where: {
-      email: {
-        equals: 'customer@example.com',
-      },
-    },
-  })
+    // Determine query filter based on collection slug to implement upsert
+    let whereQuery: any = null
+
+    if (collection === 'users') {
+      const email = (data as any).email
+      if (email) whereQuery = { email: { equals: email } }
+    } else if (collection === 'categories') {
+      const slug = (data as any).slug
+      if (slug) whereQuery = { slug: { equals: slug } }
+    } else if (collection === 'media') {
+      const alt = (data as any).alt
+      // Prefer alt — Payload may store suffixed filenames (e.g. hero-laptop-1.png).
+      if (alt) {
+        whereQuery = { alt: { equals: alt } }
+      } else if (file?.name) {
+        whereQuery = { filename: { equals: file.name } }
+      }
+    } else if (collection === 'variantTypes') {
+      const name = (data as any).name
+      if (name) whereQuery = { name: { equals: name } }
+    } else if (collection === 'variantOptions') {
+      const value = (data as any).value
+      const variantType = (data as any).variantType
+      if (value && variantType) {
+        whereQuery = {
+          and: [
+            { value: { equals: value } },
+            { variantType: { equals: variantType } },
+          ],
+        }
+      }
+    } else if (collection === 'products') {
+      const slug = (data as any).slug
+      if (slug) whereQuery = { slug: { equals: slug } }
+    } else if (collection === 'forms') {
+      const title = (data as any).title
+      if (title) whereQuery = { title: { equals: title } }
+    } else if (collection === 'pages') {
+      const slug = (data as any).slug
+      if (slug) whereQuery = { slug: { equals: slug } }
+    } else if (collection === 'variants') {
+      const product = (data as any).product
+      const options = (data as any).options || []
+      const productId = typeof product === 'object' ? product?.id : product
+      if (productId && options.length > 0) {
+        const optionIds = options.map((o: any) => (typeof o === 'object' ? o?.id : o))
+        whereQuery = {
+          and: [
+            { product: { equals: productId } },
+            ...optionIds.map((id: any) => ({
+              options: { contains: id },
+            })),
+          ],
+        }
+      }
+    } else if (collection === 'addresses') {
+      const customer = (data as any).customer
+      const customerId = typeof customer === 'object' ? customer?.id : customer
+      if (customerId) whereQuery = { customer: { equals: customerId } }
+    } else if (collection === 'carts') {
+      const customer = (data as any).customer
+      const customerId = typeof customer === 'object' ? customer?.id : customer
+      if (customerId) {
+        whereQuery = {
+          and: [
+            { customer: { equals: customerId } },
+            { purchasedAt: { exists: false } },
+          ],
+        }
+      }
+    } else if (collection === 'transactions' || collection === 'orders') {
+      const customer = (data as any).customer
+      const customerId = typeof customer === 'object' ? customer?.id : customer
+      const amount = (data as any).amount
+      if (customerId && amount) {
+        whereQuery = {
+          and: [
+            { customer: { equals: customerId } },
+            { amount: { equals: amount } },
+          ],
+        }
+      }
+    }
+
+    if (whereQuery) {
+      const existing = await payload.find({
+        collection,
+        where: whereQuery,
+        limit: 1,
+        depth: 0,
+        req,
+      })
+      if (existing.docs.length > 0) {
+        existingDoc = existing.docs[0]
+      }
+    }
+
+    if (existingDoc) {
+      return (await payload.update({
+        collection,
+        id: existingDoc.id,
+        data: data as any,
+        depth,
+        ...(file
+          ? {
+              file,
+              overwriteExistingFiles: true,
+            }
+          : {}),
+        req,
+      })) as any
+    }
+
+    return (await payload.create({
+      collection,
+      data,
+      depth,
+      file,
+      req,
+    })) as any
+  }
+  const updateGlobal = (args: Parameters<typeof payload.updateGlobal>[0]) =>
+    payload.updateGlobal({ ...args, req })
+
+  payload.logger.info(`— Database will not be cleared. Processing updates/inserts...`)
+  payload.logger.info(`— Seeding customer and customer data...`)
 
   payload.logger.info(`— Seeding media...`)
 
-  const [imageHatBuffer, imageTshirtBlackBuffer, imageTshirtWhiteBuffer, heroBuffer] =
-    await Promise.all([
-      readLocalOrFetch(
-        'hat-logo.png',
-        'https://raw.githubusercontent.com/payloadcms/payload/refs/heads/main/templates/ecommerce/src/endpoints/seed/hat-logo.png',
-      ),
-      readLocalOrFetch(
-        'tshirt-black.png',
-        'https://raw.githubusercontent.com/payloadcms/payload/refs/heads/main/templates/ecommerce/src/endpoints/seed/tshirt-black.png',
-      ),
-      readLocalOrFetch(
-        'tshirt-white.png',
-        'https://raw.githubusercontent.com/payloadcms/payload/refs/heads/main/templates/ecommerce/src/endpoints/seed/tshirt-white.png',
-      ),
-      fetchFileByURL(
-        'https://raw.githubusercontent.com/payloadcms/payload/refs/heads/main/templates/website/src/endpoints/seed/image-hero1.webp',
-      ),
-    ])
-
-  const [
-    customer,
-    imageHat,
-    imageTshirtBlack,
-    imageTshirtWhite,
-    imageHero,
-    accessoriesCategory,
-    tshirtsCategory,
-    hatsCategory,
-  ] = await Promise.all([
-    create({
-      collection: 'users',
-      data: {
-        name: 'Customer',
-        email: 'customer@example.com',
-        password: 'password',
-        roles: ['customer'],
-      },
-    }),
-    create({
-      collection: 'media',
-      data: imageHatData,
-      file: imageHatBuffer,
-    }),
-    create({
-      collection: 'media',
-      data: imageTshirtBlackData,
-      file: imageTshirtBlackBuffer,
-    }),
-    create({
-      collection: 'media',
-      data: imageTshirtWhiteData,
-      file: imageTshirtWhiteBuffer,
-    }),
-    create({
-      collection: 'media',
-      data: imageHero1Data,
-      file: heroBuffer,
-    }),
-    ...categories.map((category) =>
-      create({
-        collection: 'categories',
-        data: {
-          title: category,
-          slug: category,
-        },
-      }),
-    ),
+  const [heroBuffer, mobileHeroBuffer] = await Promise.all([
+    fetchSeedImage(heroDesktopImageFileName),
+    fetchSeedImage(heroMobileImageFileName),
   ])
 
-  payload.logger.info(`— Seeding variant types and options...`)
-
-  const sizeVariantType = await create({
-    collection: 'variantTypes',
+  const customer = await create({
+    collection: 'users',
     data: {
-      name: 'size',
-      label: 'Size',
+      name: 'Customer',
+      email: 'customer@example.com',
+      password: 'password',
+      roles: ['customer'],
     },
   })
 
-  const sizeVariantOptionsResults: VariantOption[] = []
+  const imageHero = await create({
+    collection: 'media',
+    data: imageHero1Data,
+    file: heroBuffer,
+  })
 
-  for (const option of sizeVariantOptions) {
-    const result = await create({
-      collection: 'variantOptions',
-      data: {
-        ...option,
-        variantType: sizeVariantType.id,
-      },
-    })
-    sizeVariantOptionsResults.push(result)
+  const imageMobileHero = await create({
+    collection: 'media',
+    data: imageMobileHeroData,
+    file: mobileHeroBuffer,
+  })
+
+  const {
+    products: sellerProducts,
+    productImages,
+  } = await seedSellerCatalog({ payload, req, create })
+
+  if (sellerProducts.length < 3) {
+    throw new Error('Expected at least 3 products in seller-product-catalog.csv')
   }
 
-  const [small, medium, large, xlarge] = sizeVariantOptionsResults
+  // Prefer voice-demo SKUs on the homepage grid when present.
+  const bySlug = new Map(
+    sellerProducts.map((p) => [typeof p.slug === 'string' ? p.slug : '', p] as const),
+  )
+  const featuredSlugs = [
+    'aashirvaad-atta-1kg',
+    'amul-taaza-toned-milk-500ml',
+    'tata-tea-gold-250g',
+  ]
+  const featuredProducts = [
+    ...featuredSlugs.map((slug) => bySlug.get(slug)).filter((p): p is Product => Boolean(p)),
+    ...sellerProducts,
+  ]
+    .filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i)
+    .slice(0, 3) as [Product, Product, Product]
 
-  const colorVariantType = await create({
-    collection: 'variantTypes',
-    data: {
-      name: 'color',
-      label: 'Color',
-    },
-  })
+  const [productA, productB, productC] = featuredProducts
+  const seedLinePrice =
+    typeof productA.priceInINR === 'number' ? productA.priceInINR : rupeesToMinor(50)
 
-  const [black, white] = await Promise.all(
-    colorVariantOptions.map((option) => {
-      return create({
-        collection: 'variantOptions',
-        data: {
-          ...option,
-          variantType: colorVariantType.id,
-        },
-      })
+  // Carousel cards: prefer images from featured SKUs, then any catalog media.
+  const featuredImageIds = new Set(
+    featuredProducts.flatMap((p) => {
+      const gallery = Array.isArray(p.gallery) ? p.gallery : []
+      return gallery
+        .map((g) => (g && typeof g === 'object' && 'image' in g ? g.image : null))
+        .map((img) => (img && typeof img === 'object' && 'id' in img ? String(img.id) : typeof img === 'string' ? img : null))
+        .filter((id): id is string => Boolean(id))
     }),
   )
-
-  payload.logger.info(`— Seeding products...`)
-
-  const productHat = await create({
-    collection: 'products',
-    depth: 0,
-    data: productHatData({
-      galleryImage: imageHat,
-      metaImage: imageHat,
-      variantTypes: [colorVariantType],
-      categories: [hatsCategory],
-      relatedProducts: [],
-    }),
-  })
-
-  // Create without gallery.variantOption first — filterOptions validation
-  // flakes on Atlas when options were just inserted (invalid selections).
-  // Attach color options in a follow-up update.
-  const productTshirt = await create({
-    collection: 'products',
-    depth: 0,
-    data: productTshirtData({
-      galleryImages: [
-        { image: imageTshirtBlack.id },
-        { image: imageTshirtWhite.id },
-      ] as NonNullable<import('@/payload-types').Product['gallery']>,
-      metaImage: imageTshirtBlack,
-      contentImage: imageHero,
-      variantTypes: [colorVariantType, sizeVariantType],
-      categories: [tshirtsCategory],
-      relatedProducts: [productHat],
-    }),
-  })
-
-  await update({
-    collection: 'products',
-    id: productTshirt.id,
-    depth: 0,
-    data: {
-      gallery: [
-        { image: imageTshirtBlack.id, variantOption: black.id },
-        { image: imageTshirtWhite.id, variantOption: white.id },
-      ],
-    },
-  })
-
-  let hoodieID: number | string = productTshirt.id
-
-  if (payload.db.defaultIDType === 'text') {
-    hoodieID = `"${hoodieID}"`
-  }
-
-  const [
-    smallTshirtHoodieVariant,
-    mediumTshirtHoodieVariant,
-    largeTshirtHoodieVariant,
-    xlargeTshirtHoodieVariant,
-  ] = await Promise.all(
-    [small, medium, large, xlarge].map((variantOption) =>
-      create({
-        collection: 'variants',
-        depth: 0,
-        data: productTshirtVariant({
-          product: productTshirt,
-          variantOptions: [variantOption, white],
-        }),
-      }),
-    ),
-  )
-
-  await Promise.all(
-    [small, medium, large, xlarge].map((variantOption) =>
-      create({
-        collection: 'variants',
-        depth: 0,
-        data: productTshirtVariant({
-          product: productTshirt,
-          variantOptions: [variantOption, black],
-          ...(variantOption.value === 'medium' ? { inventory: 0 } : {}),
-        }),
-      }),
-    ),
-  )
+  const primaryProductImages: Media[] = [
+    ...productImages.filter((m) => featuredImageIds.has(String(m.id))),
+    ...productImages,
+  ]
+    .filter((m, i, arr) => arr.findIndex((x) => x.id === m.id) === i)
+    .slice(0, 8)
 
   payload.logger.info(`— Seeding contact form...`)
 
-  const contactForm = await create({
+  const contactForm: Form = await create({
     collection: 'forms',
     depth: 0,
     data: contactFormData(),
   })
 
-  payload.logger.info(`— Seeding pages...`)
+  payload.logger.info(`— Seeding pages (static)...`)
 
-  const [_, contactPage] = await Promise.all([
-    create({
+  await create({
+    collection: 'pages',
+    depth: 0,
+    data: homePageData({
+      heroImage: imageHero,
+      mobileHeroImage: imageMobileHero,
+      metaImage: imageHero,
+      carouselImages: [
+        primaryProductImages[0] ?? imageHero,
+        primaryProductImages[1] ?? imageHero,
+        primaryProductImages[2] ?? imageHero,
+      ],
+      featuredProductIds: [String(productA.id), String(productB.id), String(productC.id)],
+    }),
+  })
+  await create({
+    collection: 'pages',
+    depth: 0,
+    data: contactPageData({
+      contactForm: contactForm,
+    }),
+  })
+  for (const page of footerSeedPages()) {
+    await create({
       collection: 'pages',
       depth: 0,
-      data: homePageData({
-        contentImage: imageHero,
-        metaImage: imageHat,
-      }),
-    }),
-    create({
-      collection: 'pages',
-      depth: 0,
-      data: contactPageData({
-        contactForm: contactForm,
-      }),
-    }),
-  ])
+      data: page,
+    })
+  }
 
   payload.logger.info(`— Seeding addresses...`)
 
-  const customerUSAddress = await create({
+  await create({
     collection: 'addresses',
     depth: 0,
     data: {
       customer: customer.id,
-      ...(baseAddressUSData as Address),
-    },
-  })
-
-  const customerUKAddress = await create({
-    collection: 'addresses',
-    depth: 0,
-    data: {
-      customer: customer.id,
-      ...(baseAddressUKData as Address),
+      ...(baseAddressData as Address),
     },
   })
 
   payload.logger.info(`— Seeding transactions...`)
 
-  const pendingTransaction = await create({
+  await create({
     collection: 'transactions',
     data: {
-      currency: 'USD',
+      currency: 'INR',
       customer: customer.id,
-      paymentMethod: 'stripe',
-      stripe: {
-        customerID: 'cus_123',
-        paymentIntentID: 'pi_123',
+      paymentMethod: 'cod',
+      cod: {
+        reference: 'cod_test123',
       },
       status: 'pending',
-      billingAddress: baseAddressUSData,
+      billingAddress: baseAddressData,
     },
   })
 
   const succeededTransaction = await create({
     collection: 'transactions',
     data: {
-      currency: 'USD',
+      currency: 'INR',
       customer: customer.id,
-      paymentMethod: 'stripe',
-      stripe: {
-        customerID: 'cus_123',
-        paymentIntentID: 'pi_123',
+      paymentMethod: 'cod',
+      cod: {
+        reference: 'cod_test123',
       },
       status: 'succeeded',
-      billingAddress: baseAddressUSData,
+      billingAddress: baseAddressData,
     },
   })
 
-  let succeededTransactionID: number | string = succeededTransaction.id
-
-  if (payload.db.defaultIDType === 'text') {
-    succeededTransactionID = `"${succeededTransactionID}"`
-  }
-
   payload.logger.info(`— Seeding carts...`)
 
-  // This cart is open as it's created now
-  const openCart = await create({
+  await create({
     collection: 'carts',
     data: {
       customer: customer.id,
-      currency: 'USD',
+      currency: 'INR',
       items: [
         {
-          product: productTshirt.id,
-          variant: mediumTshirtHoodieVariant.id,
+          product: productA.id,
           quantity: 1,
         },
       ],
@@ -462,239 +387,249 @@ export const seed = async ({
 
   const oldTimestamp = new Date('2023-01-01T00:00:00Z').toISOString()
 
-  // Cart is abandoned because it was created long in the past
-  const abandonedCart = await create({
+  await create({
     collection: 'carts',
     data: {
-      currency: 'USD',
+      currency: 'INR',
       createdAt: oldTimestamp,
       items: [
         {
-          product: productHat.id,
+          product: productB.id,
           quantity: 1,
         },
       ],
     },
   })
 
-  // Cart is purchased because it has a purchasedAt date
-  const completedCart = await create({
+  await create({
     collection: 'carts',
     data: {
       customer: customer.id,
-      currency: 'USD',
+      currency: 'INR',
       purchasedAt: new Date().toISOString(),
-      subtotal: 7499,
+      subtotal: seedLinePrice * 2,
       items: [
         {
-          product: productTshirt.id,
-          variant: smallTshirtHoodieVariant.id,
+          product: productA.id,
           quantity: 1,
         },
         {
-          product: productTshirt.id,
-          variant: mediumTshirtHoodieVariant.id,
+          product: productB.id,
           quantity: 1,
         },
       ],
     },
   })
 
-  let completedCartID: number | string = completedCart.id
-
-  if (payload.db.defaultIDType === 'text') {
-    completedCartID = `"${completedCartID}"`
-  }
-
   payload.logger.info(`— Seeding orders...`)
 
-  const orderInCompleted = await create({
+  await create({
     collection: 'orders',
     data: {
-      amount: 7499,
-      currency: 'USD',
+      amount: seedLinePrice * 2,
+      currency: 'INR',
       customer: customer.id,
-      shippingAddress: baseAddressUSData,
+      shippingAddress: baseAddressData,
       items: [
         {
-          product: productTshirt.id,
-          variant: smallTshirtHoodieVariant.id,
+          product: productA.id,
           quantity: 1,
         },
         {
-          product: productTshirt.id,
-          variant: mediumTshirtHoodieVariant.id,
+          product: productB.id,
           quantity: 1,
         },
       ],
       status: 'completed',
+      paymentStatus: 'paid',
       transactions: [succeededTransaction.id],
     },
   })
 
-  const orderInProcessing = await create({
+  await create({
     collection: 'orders',
     data: {
-      amount: 7499,
-      currency: 'USD',
+      amount: seedLinePrice * 2,
+      currency: 'INR',
       customer: customer.id,
-      shippingAddress: baseAddressUSData,
+      shippingAddress: baseAddressData,
       items: [
         {
-          product: productTshirt.id,
-          variant: smallTshirtHoodieVariant.id,
+          product: productA.id,
           quantity: 1,
         },
         {
-          product: productTshirt.id,
-          variant: mediumTshirtHoodieVariant.id,
+          product: productC.id,
           quantity: 1,
         },
       ],
       status: 'processing',
+      paymentStatus: 'paid',
       transactions: [succeededTransaction.id],
     },
   })
 
   payload.logger.info(`— Seeding globals...`)
 
-  await Promise.all([
-    updateGlobal({
-      slug: 'header',
-      data: {
-        navItems: [
-          {
-            link: {
-              type: 'custom',
-              label: 'Home',
-              url: '/',
-            },
+  const headerData: Partial<Header> = {
+    announcement: {
+      enabled: true,
+      text: 'Boliye atta, doodh, chai — COD with haan pakka · Free shipping over ₹1,999',
+      link: '/shop',
+    },
+    navItems: [
+        {
+          link: {
+            type: 'custom',
+            label: 'Home',
+            url: '/',
           },
-          {
-            link: {
-              type: 'custom',
-              label: 'Shop',
-              url: '/shop',
-            },
+        },
+        {
+          link: {
+            type: 'custom',
+            label: 'Shop',
+            url: '/shop',
           },
-          {
-            link: {
-              type: 'custom',
-              label: 'Account',
-              url: '/account',
-            },
+        },
+        {
+          link: {
+            type: 'custom',
+            label: 'Contact',
+            url: '/contact',
           },
-        ],
-      },
-    }),
-    updateGlobal({
-      slug: 'footer',
-      data: {
-        navItems: [
-          {
-            link: {
-              type: 'custom',
-              label: 'Admin',
-              url: '/admin',
-            },
-          },
-          {
-            link: {
-              type: 'custom',
-              label: 'Find my order',
-              url: '/find-order',
-            },
-          },
-          {
-            link: {
-              type: 'custom',
-              label: 'Source Code',
-              newTab: true,
-              url: 'https://github.com/payloadcms/payload/tree/3.x/templates/website',
-            },
-          },
-          {
-            link: {
-              type: 'custom',
-              label: 'Payload',
-              newTab: true,
-              url: 'https://payloadcms.com/',
-            },
-          },
-        ],
-      },
-    }),
-  ])
+        },
+      ],
+  }
 
-  payload.logger.info(`— Seeding Naradji grocery SKUs (voice aliases)...`)
+  await updateGlobal({
+    slug: 'header',
+    data: headerData,
+  })
 
-  for (const p of FALLBACK_CATALOG) {
-    const existing = await payload.find({
-      collection: 'products',
-      where: { slug: { equals: p.slug } },
-      limit: 1,
-      depth: 0,
-    })
-    const data = {
-      title: p.title,
-      slug: p.slug,
-      priceInUSD: p.price,
-      priceInUSDEnabled: true,
-      unit: p.unit,
-      inventory: 100,
-      aliases: p.aliases.map((alias) => ({ alias })),
-      _status: 'published' as const,
+  await updateGlobal({
+    slug: 'footer',
+    data: {
+      footerCopy: '© 2026 Naradji',
+      socialLinks: [],
+      sections: [
+        {
+          heading: 'Company',
+          links: [
+            {
+              link: {
+                type: 'custom',
+                label: 'Shop',
+                url: '/shop',
+              },
+            },
+            {
+              link: {
+                type: 'custom',
+                label: 'About',
+                url: '/about',
+              },
+            },
+            {
+              link: {
+                type: 'custom',
+                label: 'Contact',
+                url: '/contact',
+              },
+            },
+            {
+              link: {
+                type: 'custom',
+                label: 'Find my order',
+                url: '/find-order',
+              },
+            },
+          ],
+        },
+        {
+          heading: 'Legal',
+          links: [
+            {
+              link: {
+                type: 'custom',
+                label: 'Privacy Policy',
+                url: '/privacy-policy',
+              },
+            },
+            {
+              link: {
+                type: 'custom',
+                label: 'Shipping Policy',
+                url: '/shipping-policy',
+              },
+            },
+            {
+              link: {
+                type: 'custom',
+                label: 'Refund Policy',
+                url: '/refund-policy',
+              },
+            },
+            {
+              link: {
+                type: 'custom',
+                label: 'Terms & Conditions',
+                url: '/terms-conditions',
+              },
+            },
+          ],
+        },
+      ],
+    } as any,
+  })
+
+  const pricingCheck = await payload.find({
+    collection: 'products',
+    depth: 1,
+    limit: 3,
+    overrideAccess: true,
+    req,
+    where: {
+      slug: {
+        in: featuredProducts.map((product) => product.slug as string),
+      },
+    },
+  })
+
+  for (const product of pricingCheck.docs) {
+    if (product.enableVariants) {
+      const variantWithPrice = product.variants?.docs?.find(
+        (variant) => typeof variant === 'object' && typeof variant.priceInINR === 'number',
+      )
+      if (!variantWithPrice) {
+        throw new Error(`Seed validation failed: variant product "${product.slug}" has no variant prices.`)
+      }
+      continue
     }
-    if (existing.docs[0]) {
-      await update({
-        collection: 'products',
-        id: existing.docs[0].id,
-        data,
-        depth: 0,
-      })
-    } else {
-      await create({
-        collection: 'products',
-        data,
-        depth: 0,
-      })
+
+    if (typeof product.priceInINR !== 'number') {
+      throw new Error(`Seed validation failed: product "${product.slug}" is missing priceInINR.`)
     }
   }
 
   payload.logger.info('Seeded database successfully!')
 }
 
-async function readLocalOrFetch(localName: string, remoteUrl: string): Promise<File> {
-  const localPath = path.resolve(seedDir, localName)
-  if (fs.existsSync(localPath)) {
-    const data = fs.readFileSync(localPath)
-    const ext = localName.split('.').pop() || 'png'
-    return {
-      name: localName,
-      data: Buffer.from(data),
-      mimetype: ext === 'webp' ? 'image/webp' : `image/${ext}`,
-      size: data.byteLength,
-    }
+async function fetchFileFromPath(filePath: string): Promise<File> {
+  const data = await readFile(filePath)
+  const ext = path.extname(filePath).replace('.', '').toLowerCase()
+  const mimetypeByExtension: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+    mp4: 'video/mp4',
   }
-  return fetchFileByURL(remoteUrl)
-}
-
-async function fetchFileByURL(url: string): Promise<File> {
-  const res = await fetch(url, {
-    credentials: 'include',
-    method: 'GET',
-  })
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch file from ${url}, status: ${res.status}`)
-  }
-
-  const data = await res.arrayBuffer()
 
   return {
-    name: url.split('/').pop() || `file-${Date.now()}`,
-    data: Buffer.from(data),
-    mimetype: `image/${url.split('.').pop()}`,
+    name: path.basename(filePath),
+    data,
+    mimetype: mimetypeByExtension[ext] ?? 'application/octet-stream',
     size: data.byteLength,
   }
 }

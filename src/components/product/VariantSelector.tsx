@@ -4,6 +4,11 @@ import { Button } from '@/components/ui/button'
 import type { Product } from '@/payload-types'
 
 import { createUrl } from '@/utilities/createUrl'
+import {
+  getSellableVariants,
+  getVariantTypesWithOptions,
+  productHasVariants,
+} from '@/utilities/productVariantState'
 import clsx from 'clsx'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import React from 'react'
@@ -12,15 +17,14 @@ export function VariantSelector({ product }: { product: Product }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const variants = product.variants?.docs
-  const variantTypes = product.variantTypes
-  const hasVariants = Boolean(product.enableVariants && variants?.length && variantTypes?.length)
+  const variants = getSellableVariants(product)
+  const variantTypes = getVariantTypesWithOptions(product)
 
-  if (!hasVariants) {
+  if (!productHasVariants(product)) {
     return null
   }
 
-  return variantTypes?.map((type) => {
+  return variantTypes.map((type) => {
     if (!type || typeof type !== 'object') {
       return <></>
     }
@@ -59,29 +63,22 @@ export function VariantSelector({ product }: { product: Product }) {
 
               let isAvailableForSale = true
 
-              // Find a matching variant
-              if (variants) {
-                const matchingVariant = variants
-                  .filter((variant) => typeof variant === 'object')
-                  .find((variant) => {
-                    if (!variant.options || !Array.isArray(variant.options)) return false
+              if (variants.length) {
+                const matchingVariant = variants.find((variant) => {
+                  if (!variant.options || !Array.isArray(variant.options)) return false
 
-                    // Check if all variant options match the current options in the URL
-                    return variant.options.every((variantOption) => {
-                      if (typeof variantOption !== 'object')
-                        return currentOptions.includes(String(variantOption))
+                  return variant.options.every((variantOption) => {
+                    if (typeof variantOption !== 'object')
+                      return currentOptions.includes(String(variantOption))
 
-                      return currentOptions.includes(String(variantOption.id))
-                    })
+                    return currentOptions.includes(String(variantOption.id))
                   })
+                })
 
                 if (matchingVariant) {
-                  // If we found a matching variant, set the variant ID in the search params.
                   optionSearchParams.set('variant', String(matchingVariant.id))
 
-                  if (matchingVariant.inventory && matchingVariant.inventory > 0) {
-                    isAvailableForSale = true
-                  } else {
+                  if (!matchingVariant.inventory || matchingVariant.inventory <= 0) {
                     isAvailableForSale = false
                   }
                 }

@@ -1,61 +1,43 @@
-import type { Order } from '@/payload-types'
 import type { Metadata } from 'next'
 
-import { mergeOpenGraph } from '@/utilities/mergeOpenGraph'
-
+import { AccountPanel } from '@/components/account/AccountPanel'
 import { OrderItem } from '@/components/OrderItem'
-import { headers as getHeaders } from 'next/headers'
-import configPromise from '@payload-config'
-import { getPayload } from 'payload'
+import { getCustomerOrders } from '@/utilities/getCustomerOrders'
+import { getRequestUser } from '@/utilities/getRequestUser'
+import { mergeOpenGraph } from '@/utilities/mergeOpenGraph'
 import { redirect } from 'next/navigation'
 
 export default async function Orders() {
-  const headers = await getHeaders()
-  const payload = await getPayload({ config: configPromise })
-  const { user } = await payload.auth({ headers })
-
-  let orders: Order[] | null = null
+  const user = await getRequestUser()
 
   if (!user) {
-    redirect(`/login?warning=${encodeURIComponent('Please login to access your orders.')}`)
+    redirect(`/login?warning=${encodeURIComponent('Log in to continue.')}`)
   }
 
-  try {
-    const ordersResult = await payload.find({
-      collection: 'orders',
-      limit: 0,
-      pagination: false,
-      user,
-      overrideAccess: false,
-      where: {
-        customer: {
-          equals: user?.id,
-        },
-      },
-    })
+  let orders: Awaited<ReturnType<typeof getCustomerOrders>> = []
 
-    orders = ordersResult?.docs || []
-  } catch (error) {}
+  try {
+    orders = await getCustomerOrders({ user, limit: 50 })
+  } catch {
+    // Build may run before APIs are live on Payload Cloud.
+  }
 
   return (
-    <>
-      <div className="border p-8 rounded-lg bg-primary-foreground w-full">
-        <h1 className="text-3xl font-medium mb-8">Orders</h1>
-        {(!orders || !Array.isArray(orders) || orders?.length === 0) && (
-          <p className="">You have no orders.</p>
-        )}
+    <AccountPanel>
+      <h1 className="mb-6 text-3xl font-semibold md:mb-8">Orders</h1>
 
-        {orders && orders.length > 0 && (
-          <ul className="flex flex-col gap-6">
-            {orders?.map((order, index) => (
-              <li key={order.id}>
-                <OrderItem order={order} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </>
+      {orders.length === 0 && <p className="text-muted-foreground">No orders yet.</p>}
+
+      {orders.length > 0 && (
+        <ul className="flex flex-col gap-6">
+          {orders.map((order) => (
+            <li key={order.id}>
+              <OrderItem order={order} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </AccountPanel>
   )
 }
 

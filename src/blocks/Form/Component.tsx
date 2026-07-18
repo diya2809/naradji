@@ -1,16 +1,19 @@
 'use client'
-import type { Form as FormType } from '@payloadcms/plugin-form-builder/types'
+import type { FormFieldBlock } from '@payloadcms/plugin-form-builder/types'
 
 import { useRouter } from 'next/navigation'
 import React, { useCallback, useState } from 'react'
 import { useForm, FormProvider } from 'react-hook-form'
+import { BlockWrapper } from '@/components/BlockWrapper'
 import { RichText } from '@/components/RichText'
 import { Button } from '@/components/ui/button'
-import type { SerializedEditorState } from '@payloadcms/richtext-lexical/lexical'
-
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { buildInitialFormState } from './buildInitialFormState'
 import { fields } from './fields'
 import { getClientSideURL } from '@/utilities/getURL'
+import type { FormBlock as FormBlockProps } from '@/payload-types'
+import { isPopulatedForm } from '@/utilities/isPopulatedForm'
+import { isPayloadRichText } from '@/types/lexical'
 import { DefaultDocumentIDType } from 'payload'
 
 export type Value = unknown
@@ -23,28 +26,38 @@ export interface Data {
   [key: string]: Property | Property[]
 }
 
-export type FormBlockType = {
-  blockName?: string
-  blockType?: 'formBlock'
-  enableIntro: boolean
-  form: FormType
-  introContent?: SerializedEditorState
-}
-
 export const FormBlock: React.FC<
-  FormBlockType & {
+  FormBlockProps & {
     id?: DefaultDocumentIDType
   }
 > = (props) => {
+  const { enableIntro, form: formRelation, introContent, mobileLayout, textAlign } = props
+
+  if (!isPopulatedForm(formRelation)) {
+    return (
+      <BlockWrapper mobileLayout={mobileLayout} textAlign={textAlign}>
+        <Alert variant="destructive">
+          <AlertDescription>
+            Form fields are not loaded. Please re-seed or publish the contact page again.
+          </AlertDescription>
+        </Alert>
+      </BlockWrapper>
+    )
+  }
+
+  const formFromProps = formRelation
   const {
-    enableIntro,
-    form: formFromProps,
-    form: { id: formID, confirmationMessage, confirmationType, redirect, submitButtonLabel } = {},
-    introContent,
-  } = props
+    id: formID,
+    confirmationMessage,
+    confirmationType,
+    redirect,
+    submitButtonLabel,
+  } = formFromProps
 
   const formMethods = useForm({
-    defaultValues: buildInitialFormState(formFromProps.fields),
+    defaultValues: buildInitialFormState(
+      (formFromProps.fields ?? []) as FormFieldBlock[],
+    ),
   })
   const {
     control,
@@ -57,6 +70,7 @@ export const FormBlock: React.FC<
   const [hasSubmitted, setHasSubmitted] = useState<boolean>()
   const [error, setError] = useState<{ message: string; status?: string } | undefined>()
   const router = useRouter()
+  const hasRenderableFields = !!formFromProps && Array.isArray(formFromProps.fields)
 
   const onSubmit = useCallback(
     (data: Data) => {
@@ -126,42 +140,56 @@ export const FormBlock: React.FC<
   )
 
   return (
-    <div className="container lg:max-w-3xl">
-      {enableIntro && introContent && !hasSubmitted && (
-        <RichText className="mb-8 lg:mb-12" data={introContent} enableGutter={false} />
+    <BlockWrapper mobileLayout={mobileLayout} narrow textAlign={textAlign}>
+      {enableIntro && isPayloadRichText(introContent) && !hasSubmitted && (
+        <RichText className="mb-6" data={introContent} enableGutter={false} />
       )}
-      <div className="p-4 lg:p-6 border border-border rounded-[0.8rem]">
+      <div className="space-y-6">
         <FormProvider {...formMethods}>
-          {!isLoading && hasSubmitted && confirmationType === 'message' && (
-            <RichText data={confirmationMessage} />
+          {!isLoading &&
+            hasSubmitted &&
+            confirmationType === 'message' &&
+            isPayloadRichText(confirmationMessage) && (
+              <RichText data={confirmationMessage} />
+            )}
+          {isLoading && !hasSubmitted && (
+            <Alert>
+              <AlertDescription>Loading, please wait...</AlertDescription>
+            </Alert>
           )}
-          {isLoading && !hasSubmitted && <p>Loading, please wait...</p>}
-          {error && <div>{`${error.status || '500'}: ${error.message || ''}`}</div>}
-          {!hasSubmitted && (
-            <form id={formID} onSubmit={handleSubmit(onSubmit)}>
-              <div className="mb-4 last:mb-0">
-                {formFromProps &&
-                  formFromProps.fields &&
-                  formFromProps.fields?.map((field, index) => {
-                    const Field: React.FC<any> | undefined =
-                      fields?.[field.blockType as keyof typeof fields]
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{`${error.status || '500'}: ${error.message || ''}`}</AlertDescription>
+            </Alert>
+          )}
+          {!hasRenderableFields && !hasSubmitted && (
+            <Alert variant="destructive">
+              <AlertDescription>Form fields are not loaded. Please re-seed or publish the contact page again.</AlertDescription>
+            </Alert>
+          )}
+          {!hasSubmitted && hasRenderableFields && (
+            <form className="space-y-6" id={formID} onSubmit={handleSubmit(onSubmit)}>
+              <div className="space-y-6">
+                {formFromProps.fields?.map((field, index) => {
+                  const Field: React.FC<any> | undefined =
+                    fields?.[field.blockType as keyof typeof fields]
 
-                    if (Field) {
-                      return (
-                        <div className="mb-6 last:mb-0" key={index}>
-                          <Field
-                            form={formFromProps}
-                            {...field}
-                            {...formMethods}
-                            control={control}
-                            errors={errors}
-                            register={register}
-                          />
-                        </div>
-                      )
-                    }
-                    return null
-                  })}
+                  if (Field) {
+                    return (
+                      <div key={index}>
+                        <Field
+                          form={formFromProps}
+                          {...field}
+                          {...formMethods}
+                          control={control}
+                          errors={errors}
+                          register={register}
+                        />
+                      </div>
+                    )
+                  }
+                  return null
+                })}
               </div>
 
               <Button form={formID} type="submit" variant="default">
@@ -171,6 +199,6 @@ export const FormBlock: React.FC<
           )}
         </FormProvider>
       </div>
-    </div>
+    </BlockWrapper>
   )
 }

@@ -1,27 +1,32 @@
 import type { ReactNode } from 'react'
 
-import { headers as getHeaders } from 'next/headers.js'
-import configPromise from '@payload-config'
-import { getPayload } from 'payload'
-import { RenderParams } from '@/components/RenderParams'
 import { AccountNav } from '@/components/AccountNav'
+import { MaxWidthWrapper } from '@/components/MaxWidthWrapper'
+import { RenderParams } from '@/components/RenderParams'
+import { getRequestUser } from '@/utilities/getRequestUser'
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const headers = await getHeaders()
-  const payload = await getPayload({ config: configPromise })
-  const { user } = await payload.auth({ headers })
+  const user = await getRequestUser()
 
   return (
     <div>
-      <div className="container">
+      <MaxWidthWrapper>
         <RenderParams className="" />
-      </div>
+      </MaxWidthWrapper>
 
-      <div className="container mt-16 pb-8 flex gap-8">
-        {user && <AccountNav className="max-w-62 grow flex-col items-start gap-4 hidden md:flex" />}
+      <MaxWidthWrapper className="flex flex-col gap-6 pb-8 pt-4 md:mt-16 md:flex-row md:gap-8 md:pt-0">
+        {user ? (
+          <>
+            <AccountNav className="md:hidden" layout="toolbar" />
+            <AccountNav
+              className="hidden max-w-62 shrink-0 flex-col items-start gap-4 md:flex"
+              layout="sidebar"
+            />
+          </>
+        ) : null}
 
-        <div className="flex flex-col gap-12 grow">{children}</div>
-      </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-6 md:gap-12">{children}</div>
+      </MaxWidthWrapper>
     </div>
   )
 }

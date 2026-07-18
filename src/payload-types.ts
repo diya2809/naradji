@@ -10,7 +10,7 @@
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "OrderStatus".
  */
-export type OrderStatus = ('processing' | 'completed' | 'cancelled' | 'refunded') | null;
+export type OrderStatus = ('processing' | 'completed') | null;
 /**
  * Supported timezones in IANA format.
  *
@@ -76,6 +76,8 @@ export interface Config {
     pages: Page;
     categories: Category;
     media: Media;
+    reviews: Review;
+    'site-review-submissions': SiteReviewSubmission;
     forms: Form;
     'form-submissions': FormSubmission;
     addresses: Address;
@@ -109,6 +111,8 @@ export interface Config {
     pages: PagesSelect<false> | PagesSelect<true>;
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    reviews: ReviewsSelect<false> | ReviewsSelect<true>;
+    'site-review-submissions': SiteReviewSubmissionsSelect<false> | SiteReviewSubmissionsSelect<true>;
     forms: FormsSelect<false> | FormsSelect<true>;
     'form-submissions': FormSubmissionsSelect<false> | FormSubmissionsSelect<true>;
     addresses: AddressesSelect<false> | AddressesSelect<true>;
@@ -187,6 +191,7 @@ export interface UserAuthOperations {
 export interface User {
   id: string;
   name?: string | null;
+  internalToken?: string | null;
   roles?: ('admin' | 'customer')[] | null;
   orders?: {
     docs?: (string | Order)[];
@@ -236,26 +241,52 @@ export interface Order {
         id?: string | null;
       }[]
     | null;
-  shippingAddress?: {
-    title?: string | null;
-    firstName?: string | null;
-    lastName?: string | null;
-    company?: string | null;
-    addressLine1?: string | null;
-    addressLine2?: string | null;
-    city?: string | null;
-    state?: string | null;
-    postalCode?: string | null;
-    country?: string | null;
-    phone?: string | null;
+  shippingAddress: {
+    name: string;
+    phone: string;
+    alternatePhone?: string | null;
+    addressLine1: string;
+    addressLine2: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
   };
   customer?: (string | null) | User;
   customerEmail?: string | null;
   transactions?: (string | Transaction)[] | null;
   status?: OrderStatus;
   amount?: number | null;
-  currency?: 'USD' | null;
+  currency?: 'INR' | null;
+  customerName?: string | null;
+  /**
+   * Product titles for this order (auto-filled from line items).
+   */
+  productNames?: string | null;
+  customerPhone?: string | null;
   accessToken?: string | null;
+  /**
+   * Select a product to fetch variant options
+   */
+  adminProduct?: (string | null) | Product;
+  /**
+   * Select a variant of the chosen product
+   */
+  adminVariant?: (string | null) | Variant;
+  adminQuantity?: number | null;
+  /**
+   * Select from available customer addresses
+   */
+  adminAddress?: (string | null) | Address;
+  /**
+   * Pending for COD until collected on delivery; mark Paid when cash is received.
+   */
+  paymentStatus?: ('pending' | 'paid' | 'failed') | null;
+  /**
+   * Shipping fee charged for this order (₹0 = free shipping).
+   */
+  shippingCharge?: number | null;
+  emailSent?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -297,8 +328,12 @@ export interface Product {
     hasNextPage?: boolean;
     totalDocs?: number;
   };
-  priceInUSDEnabled?: boolean | null;
-  priceInUSD?: number | null;
+  priceInINREnabled?: boolean | null;
+  priceInINR?: number | null;
+  /**
+   * Original MRP. Shown struck through on product cards when higher than the sale price.
+   */
+  compareAtPriceInINR?: number | null;
   relatedProducts?: (string | Product)[] | null;
   meta?: {
     title?: string | null;
@@ -310,11 +345,11 @@ export interface Product {
   };
   categories?: (string | Category)[] | null;
   /**
-   * Display unit (kg, dozen, pack…)
+   * Sell unit for voice cart (pack, kg, litre, dozen, …)
    */
   unit?: string | null;
   /**
-   * Voice aliases (Hinglish / Gujarati / Hindi) for STT matching
+   * Speech aliases for Naradji STT matching (Hinglish / Hindi / Gujarati)
    */
   aliases?:
     | {
@@ -425,10 +460,19 @@ export interface CallToActionBlock {
         link: {
           type?: ('reference' | 'custom') | null;
           newTab?: boolean | null;
-          reference?: {
-            relationTo: 'pages';
-            value: string | Page;
-          } | null;
+          reference?:
+            | ({
+                relationTo: 'pages';
+                value: string | Page;
+              } | null)
+            | ({
+                relationTo: 'products';
+                value: string | Product;
+              } | null)
+            | ({
+                relationTo: 'categories';
+                value: string | Category;
+              } | null);
           url?: string | null;
           label: string;
           /**
@@ -439,6 +483,10 @@ export interface CallToActionBlock {
         id?: string | null;
       }[]
     | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'cta';
@@ -468,15 +516,45 @@ export interface Page {
       };
       [k: string]: unknown;
     } | null;
+    /**
+     * Makes the hero image area clickable. If empty, the first visible link below is used.
+     */
+    clickLink?: {
+      type?: ('reference' | 'custom') | null;
+      newTab?: boolean | null;
+      reference?:
+        | ({
+            relationTo: 'pages';
+            value: string | Page;
+          } | null)
+        | ({
+            relationTo: 'products';
+            value: string | Product;
+          } | null)
+        | ({
+            relationTo: 'categories';
+            value: string | Category;
+          } | null);
+      url?: string | null;
+    };
     links?:
       | {
           link: {
             type?: ('reference' | 'custom') | null;
             newTab?: boolean | null;
-            reference?: {
-              relationTo: 'pages';
-              value: string | Page;
-            } | null;
+            reference?:
+              | ({
+                  relationTo: 'pages';
+                  value: string | Page;
+                } | null)
+              | ({
+                  relationTo: 'products';
+                  value: string | Product;
+                } | null)
+              | ({
+                  relationTo: 'categories';
+                  value: string | Category;
+                } | null);
             url?: string | null;
             label: string;
             /**
@@ -487,17 +565,41 @@ export interface Page {
           id?: string | null;
         }[]
       | null;
+    /**
+     * Shown on tablet and desktop (md breakpoint and up).
+     */
     media?: (string | null) | Media;
+    /**
+     * Optional. Shown on small screens. Falls back to the desktop image when empty.
+     */
+    mobileMedia?: (string | null) | Media;
   };
   layout: (
     | CallToActionBlock
+    | CTABannerBlock
+    | CategoryCardsBlock
+    | CollectionGridBlock
+    | CompetitionFlowBlock
     | ContentBlock
+    | DisciplineArchiveBlock
+    | DividerBlock
+    | FAQBlock
+    | FeatureBlock
+    | HighlightCardsBlock
+    | InstagramReelsBlock
     | MediaBlock
     | ArchiveBlock
+    | AppleCardsCarouselBlock
     | CarouselBlock
     | ThreeItemGridBlock
     | BannerBlock
+    | CodeBlock
     | FormBlock
+    | ReviewsBlock
+    | VideosBlock
+    | TestimonialsBlock
+    | TextBlock
+    | UpcommingEvents
   )[];
   meta?: {
     title?: string | null;
@@ -515,6 +617,132 @@ export interface Page {
   updatedAt: string;
   createdAt: string;
   _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "categories".
+ */
+export interface Category {
+  id: string;
+  title: string;
+  /**
+   * When enabled, the slug will auto-generate from the title field on save and autosave.
+   */
+  generateSlug?: boolean | null;
+  slug: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CTABannerBlock".
+ */
+export interface CTABannerBlock {
+  icon?: ('sparkles' | 'gift' | 'truck' | 'heart' | 'none') | null;
+  headline: string;
+  subtext?: string | null;
+  link: {
+    type?: ('reference' | 'custom') | null;
+    newTab?: boolean | null;
+    reference?:
+      | ({
+          relationTo: 'pages';
+          value: string | Page;
+        } | null)
+      | ({
+          relationTo: 'products';
+          value: string | Product;
+        } | null)
+      | ({
+          relationTo: 'categories';
+          value: string | Category;
+        } | null);
+    url?: string | null;
+    label: string;
+    /**
+     * Choose how the link should be rendered.
+     */
+    appearance?: ('default' | 'outline') | null;
+  };
+  variant?: ('primary' | 'muted' | 'card') | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'ctaBanner';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CategoryCardsBlock".
+ */
+export interface CategoryCardsBlock {
+  title: string;
+  categories: (string | Category)[];
+  columns?: ('2' | '3') | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'categoryCards';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CollectionGridBlock".
+ */
+export interface CollectionGridBlock {
+  headline?: string | null;
+  subtext?: string | null;
+  items?:
+    | {
+        label: string;
+        id?: string | null;
+      }[]
+    | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'collectionGrid';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CompetitionFlowBlock".
+ */
+export interface CompetitionFlowBlock {
+  heading?: string | null;
+  subtitle?: string | null;
+  /**
+   * Optional embed URL. If set, cards are hidden.
+   */
+  videoUrl?: string | null;
+  cards?:
+    | {
+        title: string;
+        description?: string | null;
+        /**
+         * Shown on tablet and desktop (md breakpoint and up).
+         */
+        image?: (string | null) | Media;
+        /**
+         * Optional. Shown on small screens. Falls back to the desktop image when empty.
+         */
+        mobileImage?: (string | null) | Media;
+        id?: string | null;
+      }[]
+    | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'competitionFlow';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -543,10 +771,19 @@ export interface ContentBlock {
         link?: {
           type?: ('reference' | 'custom') | null;
           newTab?: boolean | null;
-          reference?: {
-            relationTo: 'pages';
-            value: string | Page;
-          } | null;
+          reference?:
+            | ({
+                relationTo: 'pages';
+                value: string | Page;
+              } | null)
+            | ({
+                relationTo: 'products';
+                value: string | Product;
+              } | null)
+            | ({
+                relationTo: 'categories';
+                value: string | Category;
+              } | null);
           url?: string | null;
           label: string;
           /**
@@ -557,16 +794,259 @@ export interface ContentBlock {
         id?: string | null;
       }[]
     | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'content';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "DisciplineArchiveBlock".
+ */
+export interface DisciplineArchiveBlock {
+  introContent?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  limit?: number | null;
+  showOutOfStock?: boolean | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'disciplineArchive';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "DividerBlock".
+ */
+export interface DividerBlock {
+  style?: ('line' | 'dots' | 'space') | null;
+  width?: ('full' | 'container' | 'narrow') | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'divider';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "FAQBlock".
+ */
+export interface FAQBlock {
+  headline?: string | null;
+  introContent?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  items: {
+    question: string;
+    answer: {
+      root: {
+        type: string;
+        children: {
+          type: any;
+          version: number;
+          [k: string]: unknown;
+        }[];
+        direction: ('ltr' | 'rtl') | null;
+        format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+        indent: number;
+        version: number;
+      };
+      [k: string]: unknown;
+    };
+    id?: string | null;
+  }[];
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'faq';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "FeatureBlock".
+ */
+export interface FeatureBlock {
+  title: string;
+  description?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Shown on tablet and desktop (md breakpoint and up).
+   */
+  media: string | Media;
+  /**
+   * Optional. Shown on small screens. Falls back to the desktop image when empty.
+   */
+  mobileMedia?: (string | null) | Media;
+  enableLink?: boolean | null;
+  link?: {
+    type?: ('reference' | 'custom') | null;
+    newTab?: boolean | null;
+    reference?:
+      | ({
+          relationTo: 'pages';
+          value: string | Page;
+        } | null)
+      | ({
+          relationTo: 'products';
+          value: string | Product;
+        } | null)
+      | ({
+          relationTo: 'categories';
+          value: string | Category;
+        } | null);
+    url?: string | null;
+    label: string;
+    /**
+     * Choose how the link should be rendered.
+     */
+    appearance?: ('default' | 'outline') | null;
+  };
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  imagePosition?: ('left' | 'right' | 'top' | 'bottom') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'feature';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "HighlightCardsBlock".
+ */
+export interface HighlightCardsBlock {
+  headline?: string | null;
+  cards?:
+    | {
+        title: string;
+        description?: string | null;
+        link: {
+          type?: ('reference' | 'custom') | null;
+          newTab?: boolean | null;
+          reference?:
+            | ({
+                relationTo: 'pages';
+                value: string | Page;
+              } | null)
+            | ({
+                relationTo: 'products';
+                value: string | Product;
+              } | null)
+            | ({
+                relationTo: 'categories';
+                value: string | Category;
+              } | null);
+          url?: string | null;
+          label: string;
+        };
+        /**
+         * Shown on tablet and desktop (md breakpoint and up).
+         */
+        image?: (string | null) | Media;
+        /**
+         * Optional. Shown on small screens. Falls back to the desktop image when empty.
+         */
+        mobileImage?: (string | null) | Media;
+        id?: string | null;
+      }[]
+    | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'highlightCards';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "InstagramReelsBlock".
+ */
+export interface InstagramReelsBlock {
+  headline?: string | null;
+  posts?:
+    | {
+        /**
+         * Full Instagram post or reel URL (e.g. https://www.instagram.com/p/...)
+         */
+        url: string;
+        id?: string | null;
+      }[]
+    | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'instagramReels';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "MediaBlock".
  */
 export interface MediaBlock {
+  /**
+   * Shown on tablet and desktop (md breakpoint and up).
+   */
   media: string | Media;
+  /**
+   * Optional. Shown on small screens. Falls back to the desktop image when empty.
+   */
+  mobileMedia?: (string | null) | Media;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  imagePosition?: ('left' | 'right' | 'top' | 'bottom') | null;
+  mobileImagePosition?: ('top' | 'bottom' | 'hidden') | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'mediaBlock';
@@ -601,30 +1081,62 @@ export interface ArchiveBlock {
         value: string | Product;
       }[]
     | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'archive';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "categories".
+ * via the `definition` "AppleCardsCarouselBlock".
  */
-export interface Category {
-  id: string;
-  title: string;
-  /**
-   * When enabled, the slug will auto-generate from the title field on save and autosave.
-   */
-  generateSlug?: boolean | null;
-  slug: string;
-  updatedAt: string;
-  createdAt: string;
+export interface AppleCardsCarouselBlock {
+  heading?: string | null;
+  cards: {
+    category: string;
+    title: string;
+    /**
+     * Shown on tablet and desktop (md breakpoint and up).
+     */
+    image: string | Media;
+    /**
+     * Optional. Shown on small screens. Falls back to the desktop image when empty.
+     */
+    mobileImage?: (string | null) | Media;
+    content?: {
+      root: {
+        type: string;
+        children: {
+          type: any;
+          version: number;
+          [k: string]: unknown;
+        }[];
+        direction: ('ltr' | 'rtl') | null;
+        format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+        indent: number;
+        version: number;
+      };
+      [k: string]: unknown;
+    } | null;
+    id?: string | null;
+  }[];
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'appleCardsCarousel';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "CarouselBlock".
  */
 export interface CarouselBlock {
+  heading?: string | null;
   populateBy?: ('collection' | 'selection') | null;
   relationTo?: 'products' | null;
   categories?: (string | Category)[] | null;
@@ -648,6 +1160,10 @@ export interface CarouselBlock {
    * This field is auto-populated after-read
    */
   populatedDocsTotal?: number | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'carousel';
@@ -657,7 +1173,12 @@ export interface CarouselBlock {
  * via the `definition` "ThreeItemGridBlock".
  */
 export interface ThreeItemGridBlock {
+  heading?: string | null;
   products?: (string | Product)[] | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'threeItemGrid';
@@ -667,7 +1188,7 @@ export interface ThreeItemGridBlock {
  * via the `definition` "BannerBlock".
  */
 export interface BannerBlock {
-  style: 'info' | 'warning' | 'error' | 'success';
+  style: 'info' | 'warning' | 'error' | 'success' | 'emphasis';
   content: {
     root: {
       type: string;
@@ -683,9 +1204,28 @@ export interface BannerBlock {
     };
     [k: string]: unknown;
   };
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'banner';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CodeBlock".
+ */
+export interface CodeBlock {
+  language?: ('typescript' | 'javascript' | 'css') | null;
+  code: string;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'code';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -709,6 +1249,10 @@ export interface FormBlock {
     };
     [k: string]: unknown;
   } | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'formBlock';
@@ -880,6 +1424,134 @@ export interface Form {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ReviewsBlock".
+ */
+export interface ReviewsBlock {
+  headline?: string | null;
+  reviews?:
+    | {
+        author: string;
+        text: string;
+        rating: number;
+        avatar?: (string | null) | Media;
+        id?: string | null;
+      }[]
+    | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'reviews';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "VideosBlock".
+ */
+export interface VideosBlock {
+  headline?: string | null;
+  videos?:
+    | {
+        video: string | Media;
+        caption?: string | null;
+        buttonLabel?: string | null;
+        buttonLinkType?: ('reference' | 'custom') | null;
+        buttonReference?:
+          | ({
+              relationTo: 'pages';
+              value: string | Page;
+            } | null)
+          | ({
+              relationTo: 'products';
+              value: string | Product;
+            } | null)
+          | ({
+              relationTo: 'categories';
+              value: string | Category;
+            } | null);
+        buttonUrl?: string | null;
+        buttonNewTab?: boolean | null;
+        id?: string | null;
+      }[]
+    | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'videos';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TestimonialsBlock".
+ */
+export interface TestimonialsBlock {
+  headline?: string | null;
+  testimonials?:
+    | {
+        quote: string;
+        author: string;
+        location?: string | null;
+        avatar?: (string | null) | Media;
+        id?: string | null;
+      }[]
+    | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'testimonials';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TextBlock".
+ */
+export interface TextBlock {
+  content: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  };
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'text';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "UpcommingEvents".
+ */
+export interface UpcommingEvents {
+  title?: string | null;
+  mobileLayout?: ('default' | 'compact' | 'hideMobile' | 'hideDesktop') | null;
+  mobileColumns?: ('1' | '2') | null;
+  desktopColumns?: ('auto' | '1' | '2' | '3' | '4' | '6') | null;
+  textAlign?: ('auto' | 'left' | 'center' | 'right') | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'upcommingEvents';
+}
+/**
+ * Each variant must be Published with price and inventory set. Draft variants are hidden on the storefront.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "variants".
  */
 export interface Variant {
@@ -891,8 +1563,12 @@ export interface Variant {
   product: string | Product;
   options: (string | VariantOption)[];
   inventory?: number | null;
-  priceInUSDEnabled?: boolean | null;
-  priceInUSD?: number | null;
+  priceInINREnabled?: boolean | null;
+  priceInINR?: number | null;
+  /**
+   * Original MRP for this variant. Shown struck through on the storefront when higher than the sale price.
+   */
+  compareAtPriceInINR?: number | null;
   updatedAt: string;
   createdAt: string;
   deletedAt?: string | null;
@@ -912,23 +1588,20 @@ export interface Transaction {
         id?: string | null;
       }[]
     | null;
-  paymentMethod?: 'stripe' | null;
-  stripe?: {
-    customerID?: string | null;
-    paymentIntentID?: string | null;
+  paymentMethod?: 'cod' | null;
+  cod?: {
+    reference?: string | null;
   };
-  billingAddress?: {
-    title?: string | null;
-    firstName?: string | null;
-    lastName?: string | null;
-    company?: string | null;
-    addressLine1?: string | null;
-    addressLine2?: string | null;
-    city?: string | null;
-    state?: string | null;
-    postalCode?: string | null;
-    country?: string | null;
-    phone?: string | null;
+  billingAddress: {
+    name: string;
+    phone: string;
+    alternatePhone?: string | null;
+    addressLine1: string;
+    addressLine2: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
   };
   status: 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'expired' | 'refunded';
   customer?: (string | null) | User;
@@ -936,7 +1609,11 @@ export interface Transaction {
   order?: (string | null) | Order;
   cart?: (string | null) | Cart;
   amount?: number | null;
-  currency?: 'USD' | null;
+  currency?: 'INR' | null;
+  /**
+   * Shipping fee included in this payment (₹0 = free shipping).
+   */
+  shippingCharge?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -959,7 +1636,7 @@ export interface Cart {
   purchasedAt?: string | null;
   status?: ('active' | 'purchased' | 'abandoned') | null;
   subtotal?: number | null;
-  currency?: 'USD' | null;
+  currency?: 'INR' | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -970,57 +1647,46 @@ export interface Cart {
 export interface Address {
   id: string;
   customer?: (string | null) | User;
-  title?: string | null;
-  firstName?: string | null;
-  lastName?: string | null;
-  company?: string | null;
-  addressLine1?: string | null;
-  addressLine2?: string | null;
-  city?: string | null;
-  state?: string | null;
-  postalCode?: string | null;
-  country:
-    | 'US'
-    | 'GB'
-    | 'CA'
-    | 'AU'
-    | 'AT'
-    | 'BE'
-    | 'BR'
-    | 'BG'
-    | 'CY'
-    | 'CZ'
-    | 'DK'
-    | 'EE'
-    | 'FI'
-    | 'FR'
-    | 'DE'
-    | 'GR'
-    | 'HK'
-    | 'HU'
-    | 'IN'
-    | 'IE'
-    | 'IT'
-    | 'JP'
-    | 'LV'
-    | 'LT'
-    | 'LU'
-    | 'MY'
-    | 'MT'
-    | 'MX'
-    | 'NL'
-    | 'NZ'
-    | 'NO'
-    | 'PL'
-    | 'PT'
-    | 'RO'
-    | 'SG'
-    | 'SK'
-    | 'SI'
-    | 'ES'
-    | 'SE'
-    | 'CH';
-  phone?: string | null;
+  name: string;
+  phone: string;
+  alternatePhone?: string | null;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: 'IN';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "reviews".
+ */
+export interface Review {
+  id: string;
+  product: string | Product;
+  user: string | User;
+  rating: number;
+  reviewText?: string | null;
+  photos?: (string | Media)[] | null;
+  videos?: (string | Media)[] | null;
+  status: 'pending' | 'approved' | 'rejected';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Homepage review submissions from the storefront carousel.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-review-submissions".
+ */
+export interface SiteReviewSubmission {
+  id: string;
+  author: string;
+  text: string;
+  rating: number;
+  status: 'pending' | 'approved' | 'rejected';
   updatedAt: string;
   createdAt: string;
 }
@@ -1080,6 +1746,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: string | Media;
+      } | null)
+    | ({
+        relationTo: 'reviews';
+        value: string | Review;
+      } | null)
+    | ({
+        relationTo: 'site-review-submissions';
+        value: string | SiteReviewSubmission;
       } | null)
     | ({
         relationTo: 'forms';
@@ -1169,6 +1843,7 @@ export interface PayloadMigration {
  */
 export interface UsersSelect<T extends boolean = true> {
   name?: T;
+  internalToken?: T;
   roles?: T;
   orders?: T;
   cart?: T;
@@ -1202,6 +1877,14 @@ export interface PagesSelect<T extends boolean = true> {
     | {
         type?: T;
         richText?: T;
+        clickLink?:
+          | T
+          | {
+              type?: T;
+              newTab?: T;
+              reference?: T;
+              url?: T;
+            };
         links?:
           | T
           | {
@@ -1218,18 +1901,36 @@ export interface PagesSelect<T extends boolean = true> {
               id?: T;
             };
         media?: T;
+        mobileMedia?: T;
       };
   layout?:
     | T
     | {
         cta?: T | CallToActionBlockSelect<T>;
+        ctaBanner?: T | CTABannerBlockSelect<T>;
+        categoryCards?: T | CategoryCardsBlockSelect<T>;
+        collectionGrid?: T | CollectionGridBlockSelect<T>;
+        competitionFlow?: T | CompetitionFlowBlockSelect<T>;
         content?: T | ContentBlockSelect<T>;
+        disciplineArchive?: T | DisciplineArchiveBlockSelect<T>;
+        divider?: T | DividerBlockSelect<T>;
+        faq?: T | FAQBlockSelect<T>;
+        feature?: T | FeatureBlockSelect<T>;
+        highlightCards?: T | HighlightCardsBlockSelect<T>;
+        instagramReels?: T | InstagramReelsBlockSelect<T>;
         mediaBlock?: T | MediaBlockSelect<T>;
         archive?: T | ArchiveBlockSelect<T>;
+        appleCardsCarousel?: T | AppleCardsCarouselBlockSelect<T>;
         carousel?: T | CarouselBlockSelect<T>;
         threeItemGrid?: T | ThreeItemGridBlockSelect<T>;
         banner?: T | BannerBlockSelect<T>;
+        code?: T | CodeBlockSelect<T>;
         formBlock?: T | FormBlockSelect<T>;
+        reviews?: T | ReviewsBlockSelect<T>;
+        videos?: T | VideosBlockSelect<T>;
+        testimonials?: T | TestimonialsBlockSelect<T>;
+        text?: T | TextBlockSelect<T>;
+        upcommingEvents?: T | UpcommingEventsSelect<T>;
       };
   meta?:
     | T
@@ -1265,6 +1966,95 @@ export interface CallToActionBlockSelect<T extends boolean = true> {
             };
         id?: T;
       };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CTABannerBlock_select".
+ */
+export interface CTABannerBlockSelect<T extends boolean = true> {
+  icon?: T;
+  headline?: T;
+  subtext?: T;
+  link?:
+    | T
+    | {
+        type?: T;
+        newTab?: T;
+        reference?: T;
+        url?: T;
+        label?: T;
+        appearance?: T;
+      };
+  variant?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CategoryCardsBlock_select".
+ */
+export interface CategoryCardsBlockSelect<T extends boolean = true> {
+  title?: T;
+  categories?: T;
+  columns?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CollectionGridBlock_select".
+ */
+export interface CollectionGridBlockSelect<T extends boolean = true> {
+  headline?: T;
+  subtext?: T;
+  items?:
+    | T
+    | {
+        label?: T;
+        id?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CompetitionFlowBlock_select".
+ */
+export interface CompetitionFlowBlockSelect<T extends boolean = true> {
+  heading?: T;
+  subtitle?: T;
+  videoUrl?: T;
+  cards?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        image?: T;
+        mobileImage?: T;
+        id?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
   id?: T;
   blockName?: T;
 }
@@ -1291,6 +2081,138 @@ export interface ContentBlockSelect<T extends boolean = true> {
             };
         id?: T;
       };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "DisciplineArchiveBlock_select".
+ */
+export interface DisciplineArchiveBlockSelect<T extends boolean = true> {
+  introContent?: T;
+  limit?: T;
+  showOutOfStock?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "DividerBlock_select".
+ */
+export interface DividerBlockSelect<T extends boolean = true> {
+  style?: T;
+  width?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "FAQBlock_select".
+ */
+export interface FAQBlockSelect<T extends boolean = true> {
+  headline?: T;
+  introContent?: T;
+  items?:
+    | T
+    | {
+        question?: T;
+        answer?: T;
+        id?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "FeatureBlock_select".
+ */
+export interface FeatureBlockSelect<T extends boolean = true> {
+  title?: T;
+  description?: T;
+  media?: T;
+  mobileMedia?: T;
+  enableLink?: T;
+  link?:
+    | T
+    | {
+        type?: T;
+        newTab?: T;
+        reference?: T;
+        url?: T;
+        label?: T;
+        appearance?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  imagePosition?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "HighlightCardsBlock_select".
+ */
+export interface HighlightCardsBlockSelect<T extends boolean = true> {
+  headline?: T;
+  cards?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        link?:
+          | T
+          | {
+              type?: T;
+              newTab?: T;
+              reference?: T;
+              url?: T;
+              label?: T;
+            };
+        image?: T;
+        mobileImage?: T;
+        id?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "InstagramReelsBlock_select".
+ */
+export interface InstagramReelsBlockSelect<T extends boolean = true> {
+  headline?: T;
+  posts?:
+    | T
+    | {
+        url?: T;
+        id?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
   id?: T;
   blockName?: T;
 }
@@ -1300,6 +2222,13 @@ export interface ContentBlockSelect<T extends boolean = true> {
  */
 export interface MediaBlockSelect<T extends boolean = true> {
   media?: T;
+  mobileMedia?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  imagePosition?: T;
+  mobileImagePosition?: T;
   id?: T;
   blockName?: T;
 }
@@ -1314,6 +2243,33 @@ export interface ArchiveBlockSelect<T extends boolean = true> {
   categories?: T;
   limit?: T;
   selectedDocs?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "AppleCardsCarouselBlock_select".
+ */
+export interface AppleCardsCarouselBlockSelect<T extends boolean = true> {
+  heading?: T;
+  cards?:
+    | T
+    | {
+        category?: T;
+        title?: T;
+        image?: T;
+        mobileImage?: T;
+        content?: T;
+        id?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
   id?: T;
   blockName?: T;
 }
@@ -1322,6 +2278,7 @@ export interface ArchiveBlockSelect<T extends boolean = true> {
  * via the `definition` "CarouselBlock_select".
  */
 export interface CarouselBlockSelect<T extends boolean = true> {
+  heading?: T;
   populateBy?: T;
   relationTo?: T;
   categories?: T;
@@ -1329,6 +2286,10 @@ export interface CarouselBlockSelect<T extends boolean = true> {
   selectedDocs?: T;
   populatedDocs?: T;
   populatedDocsTotal?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
   id?: T;
   blockName?: T;
 }
@@ -1337,7 +2298,12 @@ export interface CarouselBlockSelect<T extends boolean = true> {
  * via the `definition` "ThreeItemGridBlock_select".
  */
 export interface ThreeItemGridBlockSelect<T extends boolean = true> {
+  heading?: T;
   products?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
   id?: T;
   blockName?: T;
 }
@@ -1348,6 +2314,24 @@ export interface ThreeItemGridBlockSelect<T extends boolean = true> {
 export interface BannerBlockSelect<T extends boolean = true> {
   style?: T;
   content?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CodeBlock_select".
+ */
+export interface CodeBlockSelect<T extends boolean = true> {
+  language?: T;
+  code?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
   id?: T;
   blockName?: T;
 }
@@ -1359,6 +2343,105 @@ export interface FormBlockSelect<T extends boolean = true> {
   form?: T;
   enableIntro?: T;
   introContent?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ReviewsBlock_select".
+ */
+export interface ReviewsBlockSelect<T extends boolean = true> {
+  headline?: T;
+  reviews?:
+    | T
+    | {
+        author?: T;
+        text?: T;
+        rating?: T;
+        avatar?: T;
+        id?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "VideosBlock_select".
+ */
+export interface VideosBlockSelect<T extends boolean = true> {
+  headline?: T;
+  videos?:
+    | T
+    | {
+        video?: T;
+        caption?: T;
+        buttonLabel?: T;
+        buttonLinkType?: T;
+        buttonReference?: T;
+        buttonUrl?: T;
+        buttonNewTab?: T;
+        id?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TestimonialsBlock_select".
+ */
+export interface TestimonialsBlockSelect<T extends boolean = true> {
+  headline?: T;
+  testimonials?:
+    | T
+    | {
+        quote?: T;
+        author?: T;
+        location?: T;
+        avatar?: T;
+        id?: T;
+      };
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TextBlock_select".
+ */
+export interface TextBlockSelect<T extends boolean = true> {
+  content?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "UpcommingEvents_select".
+ */
+export interface UpcommingEventsSelect<T extends boolean = true> {
+  title?: T;
+  mobileLayout?: T;
+  mobileColumns?: T;
+  desktopColumns?: T;
+  textAlign?: T;
   id?: T;
   blockName?: T;
 }
@@ -1391,6 +2474,33 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "reviews_select".
+ */
+export interface ReviewsSelect<T extends boolean = true> {
+  product?: T;
+  user?: T;
+  rating?: T;
+  reviewText?: T;
+  photos?: T;
+  videos?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-review-submissions_select".
+ */
+export interface SiteReviewSubmissionsSelect<T extends boolean = true> {
+  author?: T;
+  text?: T;
+  rating?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1547,17 +2657,15 @@ export interface FormSubmissionsSelect<T extends boolean = true> {
  */
 export interface AddressesSelect<T extends boolean = true> {
   customer?: T;
-  title?: T;
-  firstName?: T;
-  lastName?: T;
-  company?: T;
+  name?: T;
+  phone?: T;
+  alternatePhone?: T;
   addressLine1?: T;
   addressLine2?: T;
   city?: T;
   state?: T;
   postalCode?: T;
   country?: T;
-  phone?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1570,8 +2678,9 @@ export interface VariantsSelect<T extends boolean = true> {
   product?: T;
   options?: T;
   inventory?: T;
-  priceInUSDEnabled?: T;
-  priceInUSD?: T;
+  priceInINREnabled?: T;
+  priceInINR?: T;
+  compareAtPriceInINR?: T;
   updatedAt?: T;
   createdAt?: T;
   deletedAt?: T;
@@ -1627,8 +2736,9 @@ export interface ProductsSelect<T extends boolean = true> {
   enableVariants?: T;
   variantTypes?: T;
   variants?: T;
-  priceInUSDEnabled?: T;
-  priceInUSD?: T;
+  priceInINREnabled?: T;
+  priceInINR?: T;
+  compareAtPriceInINR?: T;
   relatedProducts?: T;
   meta?:
     | T
@@ -1690,17 +2800,15 @@ export interface OrdersSelect<T extends boolean = true> {
   shippingAddress?:
     | T
     | {
-        title?: T;
-        firstName?: T;
-        lastName?: T;
-        company?: T;
+        name?: T;
+        phone?: T;
+        alternatePhone?: T;
         addressLine1?: T;
         addressLine2?: T;
         city?: T;
         state?: T;
         postalCode?: T;
         country?: T;
-        phone?: T;
       };
   customer?: T;
   customerEmail?: T;
@@ -1708,7 +2816,17 @@ export interface OrdersSelect<T extends boolean = true> {
   status?: T;
   amount?: T;
   currency?: T;
+  customerName?: T;
+  productNames?: T;
+  customerPhone?: T;
   accessToken?: T;
+  adminProduct?: T;
+  adminVariant?: T;
+  adminQuantity?: T;
+  adminAddress?: T;
+  paymentStatus?: T;
+  shippingCharge?: T;
+  emailSent?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1726,26 +2844,23 @@ export interface TransactionsSelect<T extends boolean = true> {
         id?: T;
       };
   paymentMethod?: T;
-  stripe?:
+  cod?:
     | T
     | {
-        customerID?: T;
-        paymentIntentID?: T;
+        reference?: T;
       };
   billingAddress?:
     | T
     | {
-        title?: T;
-        firstName?: T;
-        lastName?: T;
-        company?: T;
+        name?: T;
+        phone?: T;
+        alternatePhone?: T;
         addressLine1?: T;
         addressLine2?: T;
         city?: T;
         state?: T;
         postalCode?: T;
         country?: T;
-        phone?: T;
       };
   status?: T;
   customer?: T;
@@ -1754,6 +2869,7 @@ export interface TransactionsSelect<T extends boolean = true> {
   cart?: T;
   amount?: T;
   currency?: T;
+  shippingCharge?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1803,15 +2919,29 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
  */
 export interface Header {
   id: string;
+  announcement?: {
+    enabled?: boolean | null;
+    text?: string | null;
+    link?: string | null;
+  };
   navItems?:
     | {
         link: {
           type?: ('reference' | 'custom') | null;
           newTab?: boolean | null;
-          reference?: {
-            relationTo: 'pages';
-            value: string | Page;
-          } | null;
+          reference?:
+            | ({
+                relationTo: 'pages';
+                value: string | Page;
+              } | null)
+            | ({
+                relationTo: 'products';
+                value: string | Product;
+              } | null)
+            | ({
+                relationTo: 'categories';
+                value: string | Category;
+              } | null);
           url?: string | null;
           label: string;
         };
@@ -1827,18 +2957,41 @@ export interface Header {
  */
 export interface Footer {
   id: string;
-  navItems?:
+  footerCopy?: string | null;
+  sections?:
     | {
-        link: {
-          type?: ('reference' | 'custom') | null;
-          newTab?: boolean | null;
-          reference?: {
-            relationTo: 'pages';
-            value: string | Page;
-          } | null;
-          url?: string | null;
-          label: string;
-        };
+        heading: string;
+        links?:
+          | {
+              link: {
+                type?: ('reference' | 'custom') | null;
+                newTab?: boolean | null;
+                reference?:
+                  | ({
+                      relationTo: 'pages';
+                      value: string | Page;
+                    } | null)
+                  | ({
+                      relationTo: 'products';
+                      value: string | Product;
+                    } | null)
+                  | ({
+                      relationTo: 'categories';
+                      value: string | Category;
+                    } | null);
+                url?: string | null;
+                label: string;
+              };
+              id?: string | null;
+            }[]
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  socialLinks?:
+    | {
+        platform: 'instagram' | 'x' | 'linkedin' | 'youtube' | 'facebook' | 'pinterest';
+        url: string;
         id?: string | null;
       }[]
     | null;
@@ -1850,6 +3003,13 @@ export interface Footer {
  * via the `definition` "header_select".
  */
 export interface HeaderSelect<T extends boolean = true> {
+  announcement?:
+    | T
+    | {
+        enabled?: T;
+        text?: T;
+        link?: T;
+      };
   navItems?:
     | T
     | {
@@ -1873,18 +3033,32 @@ export interface HeaderSelect<T extends boolean = true> {
  * via the `definition` "footer_select".
  */
 export interface FooterSelect<T extends boolean = true> {
-  navItems?:
+  footerCopy?: T;
+  sections?:
     | T
     | {
-        link?:
+        heading?: T;
+        links?:
           | T
           | {
-              type?: T;
-              newTab?: T;
-              reference?: T;
-              url?: T;
-              label?: T;
+              link?:
+                | T
+                | {
+                    type?: T;
+                    newTab?: T;
+                    reference?: T;
+                    url?: T;
+                    label?: T;
+                  };
+              id?: T;
             };
+        id?: T;
+      };
+  socialLinks?:
+    | T
+    | {
+        platform?: T;
+        url?: T;
         id?: T;
       };
   updatedAt?: T;

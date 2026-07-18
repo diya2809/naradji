@@ -1,37 +1,65 @@
 'use client'
 
+import { Media } from '@/components/Media'
 import { Price } from '@/components/Price'
+import { ProductPriceDisplay } from '@/components/ProductPriceDisplay'
+import { getLineItemPricing } from '@/utilities/productPricing'
+import { getProductLineItemImage } from '@/utilities/productLineItemImage'
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet'
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer'
 import { useCart } from '@payloadcms/plugin-ecommerce/client/react'
-import { ShoppingCart } from 'lucide-react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo } from 'react'
 
 import { DeleteItemButton } from './DeleteItemButton'
 import { EditItemQuantityButton } from './EditItemQuantityButton'
 import { OpenCartButton } from './OpenCart'
+import { useCartDrawer } from './cart-context'
 import { Button } from '@/components/ui/button'
-import { Product } from '@/payload-types'
+import { Product, Variant } from '@/payload-types'
+import type { CategoryListItem, VariantOptionEntry } from '@/types/storefront'
+import { getShippingCharge } from '@/lib/shippingCharge'
 
-export function CartModal() {
+type Props = {
+  categories?: CategoryListItem[]
+}
+
+function CartLineImage({
+  product,
+  variant,
+}: {
+  product: Product
+  variant?: Variant | string | null
+}) {
+  const image = getProductLineItemImage(
+    product,
+    variant && typeof variant === 'object' ? variant : undefined,
+  )
+
+  if (!image) {
+    return <div className="relative size-full bg-muted" />
+  }
+
+  return <Media className="h-full w-full" fill imgClassName="object-cover" resource={image} />
+}
+
+export function CartModal({ categories = [] }: Props) {
   const { cart } = useCart()
-  const [isOpen, setIsOpen] = useState(false)
+  const { open, setOpen } = useCartDrawer()
 
   const pathname = usePathname()
 
   useEffect(() => {
-    // Close the cart modal when the pathname changes.
-    setIsOpen(false)
-  }, [pathname])
+    setOpen(false)
+  }, [pathname, setOpen])
 
   const totalQuantity = useMemo(() => {
     if (!cart || !cart.items || !cart.items.length) return undefined
@@ -39,27 +67,34 @@ export function CartModal() {
   }, [cart])
 
   return (
-    <Sheet onOpenChange={setIsOpen} open={isOpen}>
-      <SheetTrigger asChild>
+    <Drawer direction="right" onOpenChange={setOpen} open={open}>
+      <DrawerTrigger asChild>
         <OpenCartButton quantity={totalQuantity} />
-      </SheetTrigger>
+      </DrawerTrigger>
 
-      <SheetContent className="flex flex-col">
-        <SheetHeader>
-          <SheetTitle>My Cart</SheetTitle>
-
-          <SheetDescription>Manage your cart here, add items to view the total.</SheetDescription>
-        </SheetHeader>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Cart</DrawerTitle>
+          <DrawerDescription className="sr-only">Cart</DrawerDescription>
+        </DrawerHeader>
 
         {!cart || cart?.items?.length === 0 ? (
-          <div className="text-center flex flex-col items-center gap-2">
-            <ShoppingCart className="h-16" />
-            <p className="text-center text-2xl font-bold">Your cart is empty.</p>
+          <div className="flex flex-1 flex-col items-center px-4 pb-6 pt-2 text-center">
+            <p className="mb-6 text-lg font-medium">Empty.</p>
+            {categories.length > 0 ? (
+              <div className="flex w-full max-w-xs flex-col gap-2">
+                {categories.map((category) => (
+                  <Button asChild key={category.id} variant="default" onClick={() => setOpen(false)}>
+                    <Link href={`/shop?category=${category.id}`}>{category.title}</Link>
+                  </Button>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : (
-          <div className="grow flex px-4">
-            <div className="flex flex-col justify-between w-full">
-              <ul className="grow overflow-auto py-4">
+          <div className="min-h-0 flex-1 px-6">
+            <div className="flex h-full w-full flex-col justify-between">
+              <ul className="flex-1 overflow-y-auto py-2">
                 {cart?.items?.map((item, i) => {
                   const product = item.product
                   const variant = item.variant
@@ -67,88 +102,62 @@ export function CartModal() {
                   if (typeof product !== 'object' || !item || !product || !product.slug)
                     return <React.Fragment key={i} />
 
-                  const metaImage =
-                    product.meta?.image && typeof product.meta?.image === 'object'
-                      ? product.meta.image
-                      : undefined
-
-                  const firstGalleryImage =
-                    typeof product.gallery?.[0]?.image === 'object'
-                      ? product.gallery?.[0]?.image
-                      : undefined
-
-                  let image = firstGalleryImage || metaImage
-                  let price = product.priceInUSD
-
                   const isVariant = Boolean(variant) && typeof variant === 'object'
-
-                  if (isVariant) {
-                    price = variant?.priceInUSD
-
-                    const imageVariant = product.gallery?.find((item) => {
-                      if (!item.variantOption) return false
-                      const variantOptionID =
-                        typeof item.variantOption === 'object'
-                          ? item.variantOption.id
-                          : item.variantOption
-
-                      const hasMatch = variant?.options?.some((option) => {
-                        if (typeof option === 'object') return option.id === variantOptionID
-                        else return option === variantOptionID
-                      })
-
-                      return hasMatch
-                    })
-
-                    if (imageVariant && typeof imageVariant.image === 'object') {
-                      image = imageVariant.image
-                    }
-                  }
+                  const unitPricing = getLineItemPricing(
+                    product,
+                    isVariant ? variant : undefined,
+                  )
 
                   return (
-                    <li className="flex w-full flex-col" key={i}>
-                      <div className="relative flex w-full flex-row justify-between px-1 py-4">
-                        <div className="absolute z-40 -mt-2 ml-[55px]">
-                          <DeleteItemButton item={item} />
-                        </div>
-                        <Link
-                          className="z-30 flex flex-row space-x-4"
-                          href={`/products/${(item.product as Product)?.slug}`}
-                        >
-                          <div className="relative h-16 w-16 cursor-pointer overflow-hidden rounded-md border border-neutral-300 bg-neutral-300 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800">
-                            {image?.url && (
-                              <Image
-                                alt={image?.alt || product?.title || ''}
-                                className="h-full w-full object-cover"
-                                height={94}
-                                src={image.url}
-                                width={94}
-                              />
-                            )}
-                          </div>
-
-                          <div className="flex flex-1 flex-col text-base">
-                            <span className="leading-tight">{product?.title}</span>
-                            {isVariant && variant ? (
-                              <p className="text-sm text-neutral-500 dark:text-neutral-400 capitalize">
-                                {variant.options
-                                  ?.map((option) => {
-                                    if (typeof option === 'object') return option.label
-                                    return null
-                                  })
-                                  .join(', ')}
-                              </p>
-                            ) : null}
+                    <li className="flex w-full flex-col border-b border-border/60 last:border-b-0" key={i}>
+                      <div className="flex w-full flex-col items-center py-4">
+                        <Link href={`/products/${product.slug}`} className="mb-2.5">
+                          <div className="relative h-20 w-20 cursor-pointer overflow-hidden rounded-lg border border-border bg-card">
+                            <CartLineImage product={product} variant={variant} />
                           </div>
                         </Link>
-                        <div className="flex h-16 flex-col justify-between">
-                          {typeof price === 'number' && (
+
+                        <div className="mb-1.5 w-full px-2 text-center">
+                          <Link
+                            className="mx-auto block max-w-[85%] line-clamp-2 text-sm font-semibold leading-tight text-foreground hover:underline"
+                            href={`/products/${product.slug}`}
+                          >
+                            {product.title}
+                          </Link>
+                          {isVariant && variant ? (
+                            <p className="mt-0.5 text-xs capitalize text-muted-foreground">
+                              {variant.options
+                                ?.map((option: VariantOptionEntry) => {
+                                  if (typeof option === 'object') return option.label
+                                  return null
+                                })
+                                .join(', ')}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div className="mb-3 flex justify-center">
+                          {unitPricing.mode === 'single' && (
                             <Price
-                              amount={price}
-                              className="flex justify-end space-y-2 text-right text-sm"
+                              amount={unitPricing.price}
+                              className="text-lg font-bold text-foreground"
                             />
                           )}
-                          <div className="ml-auto flex h-9 flex-row items-center rounded-lg border">
+                          {unitPricing.mode === 'range' && (
+                            <Price
+                              className="text-lg font-bold text-foreground"
+                              highestAmount={unitPricing.highestPrice}
+                              lowestAmount={unitPricing.lowestPrice}
+                            />
+                          )}
+                          {unitPricing.mode === 'unavailable' && (
+                            <span className="text-sm text-muted-foreground">Price on request</span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-center gap-4">
+                          <DeleteItemButton item={item} />
+                          <div className="flex h-8 flex-row items-center rounded-md border border-border">
                             <EditItemQuantityButton item={item} type="minus" />
                             <p className="w-6 text-center">
                               <span className="w-full text-sm">{item.quantity}</span>
@@ -162,29 +171,51 @@ export function CartModal() {
                 })}
               </ul>
 
-              <div className="px-4">
-                <div className="py-4 text-sm text-neutral-500 dark:text-neutral-400">
-                  {typeof cart?.subtotal === 'number' && (
-                    <div className="mb-3 flex items-center justify-between border-b border-neutral-200 pb-1 pt-1 dark:border-neutral-700">
-                      <p>Total</p>
-                      <Price
-                        amount={cart?.subtotal}
-                        className="text-right text-base text-black dark:text-white"
-                      />
-                    </div>
-                  )}
+              <DrawerFooter className="border-t border-border bg-popover text-sm text-muted-foreground">
+                {typeof cart?.subtotal === 'number' && (() => {
+                  const shippingCharge = getShippingCharge(cart.subtotal)
+                  const grandTotal = cart.subtotal + shippingCharge
+                  return (
+                    <>
+                      <div className="flex items-center justify-between pb-0.5 pt-1">
+                        <p>Products</p>
+                        <Price
+                          amount={cart.subtotal}
+                          className="text-right text-sm text-foreground"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between pb-0.5">
+                        <p>Shipping</p>
+                        {shippingCharge > 0 ? (
+                          <Price
+                            amount={shippingCharge}
+                            className="text-right text-sm text-foreground"
+                          />
+                        ) : (
+                          <span className="text-right text-sm font-semibold text-foreground">Free</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between pb-1 border-t border-border/50 pt-2 mt-1">
+                        <p className="font-semibold text-foreground">Total</p>
+                        <Price
+                          amount={grandTotal}
+                          className="text-right text-base font-semibold text-foreground"
+                        />
+                      </div>
+                    </>
+                  )
+                })()}
 
-                  <Button asChild>
-                    <Link className="w-full" href="/checkout">
-                      Proceed to Checkout
-                    </Link>
-                  </Button>
-                </div>
-              </div>
+                <Button asChild>
+                  <Link className="w-full" href="/checkout">
+                    Checkout
+                  </Link>
+                </Button>
+              </DrawerFooter>
             </div>
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   )
 }

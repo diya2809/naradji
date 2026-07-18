@@ -1,7 +1,6 @@
 import type { Media as MediaType } from '@/payload-types'
 
 import { Media } from '@/components/Media'
-import { Label } from '@/components/Grid/Label'
 import clsx from 'clsx'
 import React from 'react'
 
@@ -19,17 +18,15 @@ type Props = {
 export const GridTileImage: React.FC<Props> = ({
   active,
   isInteractive = true,
-  label,
   ...props
 }) => {
   return (
     <div
       className={clsx(
-        'group flex h-full w-full items-center justify-center overflow-hidden rounded-lg border bg-white hover:border-blue-600 dark:bg-black',
+        'group flex h-full w-full items-center justify-center overflow-hidden rounded-lg bg-card',
         {
-          'border-2 border-blue-600': active,
-          'border-neutral-200 dark:border-neutral-800': !active,
-          relative: label,
+          'ring-2 ring-primary': active,
+          'ring-0': !active,
         },
       )}
     >
@@ -44,7 +41,6 @@ export const GridTileImage: React.FC<Props> = ({
           width={80}
         />
       ) : null}
-      {label ? <Label amount={label.amount} position={label.position} title={label.title} /> : null}
     </div>
   )
 }

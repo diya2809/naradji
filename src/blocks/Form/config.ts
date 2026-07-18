@@ -7,10 +7,12 @@ import {
   lexicalEditor,
 } from '@payloadcms/richtext-lexical'
 
+import { blockTabs } from '@/fields/blockTabs'
+
 export const FormBlock: Block = {
   slug: 'formBlock',
   interfaceName: 'FormBlock',
-  fields: [
+  fields: blockTabs([
     {
       name: 'form',
       type: 'relationship',
@@ -40,7 +42,7 @@ export const FormBlock: Block = {
       }),
       label: 'Intro Content',
     },
-  ],
+  ]),
   graphQL: {
     singularName: 'FormBlock',
   },

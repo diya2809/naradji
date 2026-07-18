@@ -1,7 +1,7 @@
 'use client'
-import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 
 type Props = {
   href: string
@@ -10,25 +10,21 @@ type Props = {
 
 export function Item({ href, title }: Props) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const active = pathname === href
-  const q = searchParams.get('q')
-  const DynamicTag = active ? 'p' : Link
 
   return (
-    <li className="mt-2 flex text-sm text-black dark:text-white">
-      <DynamicTag
-        className={clsx(
-          'w-full font-mono uppercase text-primary/50 px-2 text-sm py-1 rounded-md hover:bg-white/5 hover:text-primary',
-          {
-            'bg-white/5 text-primary': active,
-          },
-        )}
-        href={href}
-        prefetch={!active ? false : undefined}
-      >
-        {title}
-      </DynamicTag>
+    <li className="flex text-sm text-foreground">
+      {active ? (
+        <Button variant="secondary" className="w-full justify-start">
+          {title}
+        </Button>
+      ) : (
+        <Button asChild variant="ghost" className="w-full justify-start">
+          <Link href={href} prefetch={false}>
+            {title}
+          </Link>
+        </Button>
+      )}
     </li>
   )
 }

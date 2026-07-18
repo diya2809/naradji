@@ -3,7 +3,7 @@
 import type { SortFilterItem as SortFilterItemType } from '@/lib/constants'
 
 import { createUrl } from '@/utilities/createUrl'
-import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import React from 'react'
@@ -16,23 +16,20 @@ function PathFilterItem({ item }: { item: PathFilterItemType }) {
   const searchParams = useSearchParams()
   const active = pathname === item.path
   const newParams = new URLSearchParams(searchParams.toString())
-  const DynamicTag = active ? 'p' : Link
 
   newParams.delete('q')
 
   return (
-    <li className="mt-2 flex text-black dark:text-white" key={item.title}>
-      <DynamicTag
-        className={clsx(
-          'w-full text-sm underline-offset-4 hover:underline dark:hover:text-neutral-100',
-          {
-            'underline underline-offset-4': active,
-          },
-        )}
-        href={createUrl(item.path, newParams)}
-      >
-        {item.title}
-      </DynamicTag>
+    <li className="flex text-foreground" key={item.title}>
+      {active ? (
+        <Button className="w-full justify-start" variant="secondary">
+          {item.title}
+        </Button>
+      ) : (
+        <Button asChild className="w-full justify-start" variant="ghost">
+          <Link href={createUrl(item.path, newParams)}>{item.title}</Link>
+        </Button>
+      )}
     </li>
   )
 }
@@ -49,19 +46,19 @@ function SortFilterItem({ item }: { item: SortFilterItemType }) {
       ...(item.slug && item.slug.length && { sort: item.slug }),
     }),
   )
-  const DynamicTag = active ? 'p' : Link
-
   return (
-    <li className="mt-2 flex text-sm text-black dark:text-white" key={item.title}>
-      <DynamicTag
-        className={clsx('w-full hover:underline hover:underline-offset-4', {
-          'underline underline-offset-4': active,
-        })}
-        href={href}
-        prefetch={!active ? false : undefined}
-      >
-        {item.title}
-      </DynamicTag>
+    <li className="flex text-sm text-foreground" key={item.title}>
+      {active ? (
+        <Button className="w-full justify-start" variant="secondary">
+          {item.title}
+        </Button>
+      ) : (
+        <Button asChild className="w-full justify-start" variant="ghost">
+          <Link href={href} prefetch={false}>
+            {item.title}
+          </Link>
+        </Button>
+      )}
     </li>
   )
 }

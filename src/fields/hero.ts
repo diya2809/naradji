@@ -7,6 +7,7 @@ import {
   lexicalEditor,
 } from '@payloadcms/richtext-lexical'
 
+import { link } from './link'
 import { linkGroup } from './linkGroup'
 
 export const hero: Field = {
@@ -53,6 +54,19 @@ export const hero: Field = {
       }),
       label: false,
     },
+    link({
+      appearances: false,
+      disableLabel: true,
+      overrides: {
+        name: 'clickLink',
+        admin: {
+          condition: (_data: unknown, siblingData: { type?: string } = {}) =>
+            ['highImpact', 'mediumImpact'].includes(siblingData.type ?? ''),
+          description:
+            'Makes the hero image area clickable. If empty, the first visible link below is used.',
+        },
+      },
+    }),
     linkGroup({
       overrides: {
         maxRows: 2,
@@ -63,9 +77,21 @@ export const hero: Field = {
       type: 'upload',
       admin: {
         condition: (_, { type } = {}) => ['highImpact', 'mediumImpact'].includes(type),
+        description: 'Shown on tablet and desktop (md breakpoint and up).',
       },
+      label: 'Desktop Image',
       relationTo: 'media',
       required: true,
+    },
+    {
+      name: 'mobileMedia',
+      type: 'upload',
+      admin: {
+        condition: (_, { type } = {}) => ['highImpact', 'mediumImpact'].includes(type),
+        description: 'Optional. Shown on small screens. Falls back to the desktop image when empty.',
+      },
+      label: 'Mobile Image',
+      relationTo: 'media',
     },
   ],
   label: false,

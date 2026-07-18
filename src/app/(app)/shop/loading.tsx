@@ -1,4 +1,5 @@
 import { Grid } from '@/components/Grid'
+import { Skeleton } from '@/components/ui/skeleton'
 import React from 'react'
 
 export default function Loading() {
@@ -7,7 +8,7 @@ export default function Loading() {
       {Array(12)
         .fill(0)
         .map((_, index) => {
-          return <div className="animate-pulse bg-neutral-100 dark:bg-neutral-900" key={index} />
+          return <Skeleton className="h-full w-full" key={index} />
         })}
     </Grid>
   )

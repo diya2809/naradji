@@ -2,56 +2,30 @@ import type { Form } from '@/payload-types'
 
 import { RequiredDataFromCollectionSlug } from 'payload'
 
-type ProductArgs = {
+import { richText } from './richtext'
+
+type ContactPageArgs = {
   contactForm: Form
 }
 
-export const contactPageData: (args: ProductArgs) => RequiredDataFromCollectionSlug<'pages'> = ({
+export const contactPageData: (args: ContactPageArgs) => RequiredDataFromCollectionSlug<'pages'> = ({
   contactForm,
 }) => {
   return {
     slug: 'contact',
+    title: 'Contact',
     _status: 'published',
     hero: {
-      type: 'none',
+      type: 'lowImpact',
+      richText: richText('Say hello', 'h1'),
     },
     layout: [
       {
         blockType: 'formBlock',
         enableIntro: true,
         form: contactForm,
-        introContent: {
-          root: {
-            type: 'root',
-            children: [
-              {
-                type: 'heading',
-                children: [
-                  {
-                    type: 'text',
-                    detail: 0,
-                    format: 0,
-                    mode: 'normal',
-                    style: '',
-                    text: 'Example contact form:',
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                tag: 'h3',
-                version: 1,
-              },
-            ],
-            direction: 'ltr',
-            format: '',
-            indent: 0,
-            version: 1,
-          },
-        },
+        introContent: richText("We'd love to hear from you — custom sizing, bulk orders, or a gentle hello.", 'h3'),
       },
     ],
-    title: 'Contact',
   }
 }

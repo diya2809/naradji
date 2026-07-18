@@ -1,71 +1,47 @@
 /**
- * Seed 12 grocery SKUs with aliases into Payload products.
+ * Thin wrapper — full catalog seed is the admin /next/seed path.
  * Usage: pnpm seed:naradji
+ *
+ * disableRevalidate is required on Atlas (relationship filterOptions + txn).
+ * After seed we drop Next's data cache so CLI seed isn't masked by stale HTML.
  */
 import 'dotenv/config'
+import { rm } from 'node:fs/promises'
+import path from 'node:path'
 import { getPayload } from 'payload'
 import config from '../src/payload.config'
-import { FALLBACK_CATALOG } from '../src/lib/naradji/catalog'
+import { seed } from '../src/endpoints/seed'
+import type { PayloadRequest } from 'payload'
 
-async function sleep(ms: number) {
-  await new Promise((r) => setTimeout(r, ms))
-}
-
-async function upsertProduct(
-  payload: Awaited<ReturnType<typeof getPayload>>,
-  p: (typeof FALLBACK_CATALOG)[number],
-  attempt = 0,
-): Promise<void> {
-  const data = {
-    title: p.title,
-    slug: p.slug,
-    priceInUSD: p.price,
-    priceInUSDEnabled: true,
-    unit: p.unit,
-    inventory: 100,
-    aliases: p.aliases.map((alias) => ({ alias })),
-    _status: 'published' as const,
-  }
-
+async function bustNextDataCache() {
+  const cacheDir = path.resolve(process.cwd(), '.next/cache')
   try {
-    const existing = await payload.find({
-      collection: 'products',
-      where: { slug: { equals: p.slug } },
-      limit: 1,
-    })
-
-    if (existing.docs[0]) {
-      await payload.update({
-        collection: 'products',
-        id: existing.docs[0].id,
-        data,
-      })
-      payload.logger.info(`updated ${p.slug}`)
-    } else {
-      await payload.create({
-        collection: 'products',
-        data,
-      })
-      payload.logger.info(`created ${p.slug}`)
-    }
-  } catch (err) {
-    if (attempt < 4) {
-      await sleep(400 * (attempt + 1))
-      return upsertProduct(payload, p, attempt + 1)
-    }
-    throw err
+    await rm(cacheDir, { recursive: true, force: true })
+    console.log('NEXT_CACHE_CLEARED', cacheDir)
+  } catch {
+    // No .next yet — fine for headless CI seed.
   }
 }
 
 async function main() {
   const payload = await getPayload({ config })
-
-  for (const p of FALLBACK_CATALOG) {
-    await upsertProduct(payload, p)
-    await sleep(150)
+  const admins = await payload.find({
+    collection: 'users',
+    where: { roles: { contains: 'admin' } },
+    limit: 1,
+  })
+  const user = admins.docs[0]
+  if (!user) {
+    throw new Error('No admin user — create one at /admin first')
   }
 
-  payload.logger.info('Naradji grocery seed complete (12 SKUs)')
+  await seed({
+    payload,
+    req: { payload, user, context: { disableRevalidate: true } } as unknown as PayloadRequest,
+  })
+  await bustNextDataCache()
+  console.log('SEED_OK')
+  console.log('If next dev is running, restart it once so layout/header pick up globals.')
   process.exit(0)
 }
 

@@ -1,7 +1,9 @@
 export type Theme = 'dark' | 'light'
 
+export type ThemeSetting = Theme | 'auto'
+
 export interface ThemeContextType {
-  setTheme: (theme: Theme | null) => void // eslint-disable-line no-unused-vars
+  setTheme: (theme: ThemeSetting) => void // eslint-disable-line no-unused-vars
   theme?: Theme | null
 }
 

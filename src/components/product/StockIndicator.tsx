@@ -1,5 +1,6 @@
 'use client'
 import { Product, Variant } from '@/payload-types'
+import { productHasSellableVariants } from '@/utilities/productVariantState'
 import { useSearchParams } from 'next/navigation'
 import { useMemo } from 'react'
 
@@ -39,14 +40,19 @@ export const StockIndicator: React.FC<Props> = ({ product }) => {
     return product.inventory || 0
   }, [product.enableVariants, selectedVariant, product.inventory])
 
+  if (product.enableVariants && !productHasSellableVariants(product)) {
+    return <p className="text-sm text-muted-foreground">Out of stock</p>
+  }
+
   if (product.enableVariants && !selectedVariant) {
-    return null
+    return <p className="text-sm text-muted-foreground">Select a variant</p>
   }
 
   return (
-    <div className="uppercase font-mono text-sm font-medium text-gray-500">
+    <div className="text-sm text-muted-foreground">
       {stockQuantity < 10 && stockQuantity > 0 && <p>Only {stockQuantity} left in stock</p>}
       {(stockQuantity === 0 || !stockQuantity) && <p>Out of stock</p>}
+      {stockQuantity >= 10 && <p>In stock</p>}
     </div>
   )
 }

@@ -1,65 +1,63 @@
 'use client'
 
-import { ChevronDownIcon } from 'lucide-react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 import type { ListItem } from '.'
 
-import { FilterItem } from './FilterItem'
-
 export function FilterItemDropdown({ list }: { list: ListItem[] }) {
+  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [active, setActive] = useState('')
-  const [openSelect, setOpenSelect] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        setOpenSelect(false)
-      }
+  const activeValue = useMemo(() => {
+    const activePath = list.find((item) => 'path' in item && pathname === item.path)
+    if (activePath && 'path' in activePath) return `path:${activePath.path}`
+
+    const sort = searchParams.get('sort')
+    const activeSort = list.find((item) => 'slug' in item && sort === item.slug)
+    if (activeSort && 'slug' in activeSort) return `sort:${activeSort.slug}`
+
+    const first = list[0]
+    if (!first) return ''
+    return 'path' in first ? `path:${first.path}` : `sort:${first.slug}`
+  }, [list, pathname, searchParams])
+
+  const onValueChange = (value: string) => {
+    if (value.startsWith('path:')) {
+      const path = value.replace('path:', '')
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('q')
+      params.delete('sort')
+      router.push(`${path}${params.toString() ? `?${params.toString()}` : ''}`)
+      return
     }
 
-    window.addEventListener('click', handleClickOutside)
-    return () => window.removeEventListener('click', handleClickOutside)
-  }, [])
-
-  useEffect(() => {
-    list.forEach((listItem: ListItem) => {
-      if (
-        ('path' in listItem && pathname === listItem.path) ||
-        ('slug' in listItem && searchParams.get('sort') === listItem.slug)
-      ) {
-        setActive(listItem.title)
-      }
-    })
-  }, [pathname, list, searchParams])
+    if (value.startsWith('sort:')) {
+      const slug = value.replace('sort:', '')
+      const params = new URLSearchParams(searchParams.toString())
+      if (slug) params.set('sort', slug)
+      router.push(`${pathname}?${params.toString()}`)
+    }
+  }
 
   return (
-    <div className="relative" ref={ref}>
-      <div
-        className="flex w-full items-center justify-between rounded border border-black/30 px-4 py-2 text-sm dark:border-white/30"
-        onClick={() => {
-          setOpenSelect(!openSelect)
-        }}
-      >
-        <div>{active}</div>
-        <ChevronDownIcon className="h-4" />
-      </div>
-      {openSelect && (
-        <div
-          className="absolute z-40 w-full rounded-b-md bg-white p-4 shadow-md dark:bg-black"
-          onClick={() => {
-            setOpenSelect(false)
-          }}
-        >
-          {list.map((item: ListItem, i) => (
-            <FilterItem item={item} key={i} />
-          ))}
-        </div>
-      )}
-    </div>
+    <Select onValueChange={onValueChange} value={activeValue}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Select option" />
+      </SelectTrigger>
+      <SelectContent>
+        {list.map((item: ListItem, i) => {
+          const value = 'path' in item ? `path:${item.path}` : `sort:${item.slug}`
+          return (
+            <SelectItem key={i} value={value}>
+              {item.title}
+            </SelectItem>
+          )
+        })}
+      </SelectContent>
+    </Select>
   )
 }

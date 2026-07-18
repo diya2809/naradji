@@ -2,34 +2,37 @@
 
 import type { Header } from '@/payload-types'
 
-import { CMSLink } from '@/components/Link'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
   SheetDescription,
-  SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { useAuth } from '@/providers/Auth'
-import { MenuIcon } from 'lucide-react'
+import {
+  CircleUserRoundIcon,
+  InstagramIcon,
+  MenuIcon,
+  XIcon,
+} from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 
 interface Props {
   menu: Header['navItems']
+  topOffset: string
 }
 
-export function MobileMenu({ menu }: Props) {
+export function MobileMenu({ menu, topOffset }: Props) {
   const { user } = useAuth()
+  const menuTopOffset = topOffset
 
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isOpen, setIsOpen] = useState(false)
-
-  const closeMobileMenu = () => setIsOpen(false)
 
   useEffect(() => {
     const handleResize = () => {
@@ -39,72 +42,125 @@ export function MobileMenu({ menu }: Props) {
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [isOpen])
+  }, [])
 
   useEffect(() => {
     setIsOpen(false)
   }, [pathname, searchParams])
 
+  const resolveHref = (item: NonNullable<Header['navItems']>[number]['link']) => {
+    if (
+      item.type === 'reference' &&
+      item.reference &&
+      typeof item.reference.value === 'object' &&
+      'slug' in item.reference.value
+    ) {
+      const relationPrefix = item.reference.relationTo !== 'pages' ? `/${item.reference.relationTo}` : ''
+      return `${relationPrefix}/${item.reference.value.slug}`
+    }
+
+    return item.url || '#'
+  }
+
+  const hasSubOptions = (item: NonNullable<Header['navItems']>[number]) => {
+    const candidate = item as { subItems?: unknown[] }
+    return Array.isArray(candidate.subItems) && candidate.subItems.length > 0
+  }
+
   return (
     <Sheet onOpenChange={setIsOpen} open={isOpen}>
-      <SheetTrigger className="relative flex h-11 w-11 items-center justify-center rounded-md border border-neutral-200 text-black transition-colors dark:border-neutral-700 dark:bg-black dark:text-white">
-        <MenuIcon className="h-4" />
+      <SheetTrigger asChild>
+        <Button
+          aria-label={isOpen ? 'Close menu' : 'Open menu'}
+          size="icon"
+          variant="ghost"
+        >
+          {isOpen ? <XIcon data-icon="inline-start" /> : <MenuIcon data-icon="inline-start" />}
+        </Button>
       </SheetTrigger>
 
-      <SheetContent side="left" className="px-4">
-        <SheetHeader className="px-0 pt-4 pb-0">
-          <SheetTitle>My Store</SheetTitle>
+      <SheetContent
+        overlayStyle={{ top: menuTopOffset, bottom: 0 }}
+        showCloseButton={false}
+        side="left"
+        style={{ top: menuTopOffset, bottom: 0, height: `calc(100% - ${menuTopOffset})` }}
+      >
+        <SheetTitle className="sr-only">Mobile navigation menu</SheetTitle>
+        <SheetDescription className="sr-only">
+          Browse site links and account actions.
+        </SheetDescription>
+        <div className="flex h-full flex-col">
+          <nav className="flex-1 overflow-y-auto py-2">
+            {menu?.length ? (
+              <ul className="flex w-full flex-col">
+                {menu.map((item) => (
+                  <li key={item.id}>
+                    <Button asChild className="w-full justify-between" size="lg" variant="ghost">
+                      <Link href={resolveHref(item.link)}>
+                        <span>{item.link.label}</span>
+                        {hasSubOptions(item) ? (
+                          <span aria-hidden className="text-2xl text-muted-foreground">
+                            →
+                          </span>
+                        ) : null}
+                      </Link>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </nav>
 
-          <SheetDescription />
-        </SheetHeader>
-
-        <div className="py-4">
-          {menu?.length ? (
-            <ul className="flex w-full flex-col">
-              {menu.map((item) => (
-                <li className="py-2" key={item.id}>
-                  <CMSLink {...item.link} appearance="link" />
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-
-        {user ? (
-          <div className="mt-4">
-            <h2 className="text-xl mb-4">My account</h2>
-            <hr className="my-2" />
-            <ul className="flex flex-col gap-2">
-              <li>
-                <Link href="/orders">Orders</Link>
-              </li>
-              <li>
-                <Link href="/account/addresses">Addresses</Link>
-              </li>
-              <li>
-                <Link href="/account">Manage account</Link>
-              </li>
-              <li className="mt-6">
-                <Button asChild variant="outline">
-                  <Link href="/logout">Log out</Link>
+          <div className="min-h-44 space-y-6 bg-muted px-6 py-8">
+            {user ? (
+              <div className="space-y-4">
+                <p className="text-sm font-medium">My account</p>
+                <ul className="flex flex-col gap-1">
+                  <li>
+                    <Button asChild className="w-full justify-start" size="lg" variant="ghost">
+                      <Link href="/orders">Orders</Link>
+                    </Button>
+                  </li>
+                  <li>
+                    <Button asChild className="w-full justify-start" size="lg" variant="ghost">
+                      <Link href="/account/addresses">Addresses</Link>
+                    </Button>
+                  </li>
+                  <li>
+                    <Button asChild className="w-full justify-start" size="lg" variant="ghost">
+                      <Link href="/account">Manage account</Link>
+                    </Button>
+                  </li>
+                  <li>
+                    <Button asChild className="w-full justify-start" size="lg" variant="outline">
+                      <Link href="/logout">Log out</Link>
+                    </Button>
+                  </li>
+                </ul>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">My account</p>
+                <Button asChild className="w-full justify-start" size="lg" variant="ghost">
+                  <Link href={pathname.startsWith('/login') || pathname.startsWith('/create-account') ? '/login' : `/login?redirect=${encodeURIComponent(pathname)}`}>
+                    <CircleUserRoundIcon data-icon="inline-start" />
+                    Log in
+                  </Link>
                 </Button>
-              </li>
-            </ul>
+                <Button asChild className="w-full" variant="default">
+                  <Link href={pathname.startsWith('/login') || pathname.startsWith('/create-account') ? '/create-account' : `/create-account?redirect=${encodeURIComponent(pathname)}`}>Create account</Link>
+                </Button>
+              </div>
+            )}
+
+            <Button asChild className="w-full justify-start" size="lg" variant="ghost">
+              <Link aria-label="Follow on Instagram" href="https://instagram.com" rel="noopener noreferrer" target="_blank">
+                <InstagramIcon data-icon="inline-start" />
+                <span>Follow on Instagram</span>
+              </Link>
+            </Button>
           </div>
-        ) : (
-          <div>
-            <h2 className="text-xl mb-4">My account</h2>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button asChild className="w-full sm:flex-1" variant="outline">
-                <Link href="/login">Log in</Link>
-              </Button>
-              <span className="text-center text-sm text-muted-foreground sm:text-base">or</span>
-              <Button asChild className="w-full sm:flex-1">
-                <Link href="/create-account">Create an account</Link>
-              </Button>
-            </div>
-          </div>
-        )}
+        </div>
       </SheetContent>
     </Sheet>
   )

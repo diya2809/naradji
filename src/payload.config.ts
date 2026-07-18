@@ -19,6 +19,8 @@ import { Categories } from '@/collections/Categories'
 import { Media } from '@/collections/Media'
 import { Pages } from '@/collections/Pages'
 import { Users } from '@/collections/Users'
+import { Reviews } from '@/collections/Reviews'
+import { SiteReviewSubmissions } from '@/collections/SiteReviewSubmissions'
 import { Footer } from '@/globals/Footer'
 import { Header } from '@/globals/Header'
 import { plugins } from './plugins'
@@ -29,16 +31,16 @@ const dirname = path.dirname(filename)
 export default buildConfig({
   admin: {
     components: {
-      // The `BeforeLogin` component renders a message that you see while logging into your admin panel.
-      // Feel free to delete this at any time. Simply remove the line below and the import `BeforeLogin` statement on line 15.
       beforeLogin: ['@/components/BeforeLogin#BeforeLogin'],
-      // The `BeforeDashboard` component renders the 'welcome' block that you see after logging into your admin panel.
-      // Feel free to delete this at any time. Simply remove the line below and the import `BeforeDashboard` statement on line 15.
       beforeDashboard: ['@/components/BeforeDashboard#BeforeDashboard'],
+      graphics: {
+        Icon: '@/components/Logo/Icon#Icon',
+        Logo: '@/components/Logo/Logo#Logo',
+      },
     },
     user: Users.slug,
   },
-  collections: [Users, Pages, Categories, Media],
+  collections: [Users, Pages, Categories, Media, Reviews, SiteReviewSubmissions],
   db: mongooseAdapter({
     url: process.env.DATABASE_URL || '',
   }),
@@ -77,7 +79,6 @@ export default buildConfig({
       ]
     },
   }),
-  //email: nodemailerAdapter(),
   endpoints: [],
   globals: [Header, Footer],
   plugins,
@@ -85,8 +86,4 @@ export default buildConfig({
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
-  // Sharp is now an optional dependency -
-  // if you want to resize images, crop, set focal point, etc.
-  // make sure to install it and pass it to the config.
-  // sharp,
 })

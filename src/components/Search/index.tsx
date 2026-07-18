@@ -5,6 +5,7 @@ import { createUrl } from '@/utilities/createUrl'
 import { SearchIcon } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import React from 'react'
+import { Input } from '@/components/ui/input'
 
 type Props = {
   className?: string
@@ -32,9 +33,9 @@ export const Search: React.FC<Props> = ({ className }) => {
 
   return (
     <form className={cn('relative w-full', className)} onSubmit={onSubmit}>
-      <input
+      <Input
         autoComplete="off"
-        className="w-full rounded-lg border bg-white px-4 py-2 text-sm text-black placeholder:text-neutral-500 dark:border-neutral-800 dark:bg-black dark:text-white dark:placeholder:text-neutral-400"
+        className="w-full pr-10"
         defaultValue={searchParams?.get('q') || ''}
         key={searchParams?.get('q')}
         name="search"
@@ -42,7 +43,7 @@ export const Search: React.FC<Props> = ({ className }) => {
         type="text"
       />
       <div className="absolute right-0 top-0 mr-3 flex h-full items-center">
-        <SearchIcon className="h-4" />
+        <SearchIcon className="h-4 text-muted-foreground" />
       </div>
     </form>
   )

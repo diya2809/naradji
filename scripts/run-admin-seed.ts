@@ -44,6 +44,7 @@ async function main() {
       req: { payload, user, context: { disableRevalidate: true } } as PayloadRequest,
     })
     console.log('SEED_OK')
+    process.exit(0)
   } catch (e: unknown) {
     const err = e as { message?: string; data?: unknown; stack?: string }
     console.error('SEED_FAIL:', err.message || e)

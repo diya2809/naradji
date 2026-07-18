@@ -19,66 +19,63 @@ type Props = {
   setAddress: React.Dispatch<React.SetStateAction<Partial<Address> | undefined>>
   heading?: string
   description?: string
-  setSubmit?: React.Dispatch<React.SetStateAction<() => void | Promise<void>>>
 }
 
 export const CheckoutAddresses: React.FC<Props> = ({
   setAddress,
   heading = 'Addresses',
-  description = 'Please select or add your shipping and billing addresses.',
+  description = 'Select or add a shipping and billing address.',
 }) => {
   const { addresses } = useAddresses()
 
-  if (!addresses || addresses.length === 0) {
+  if (!addresses?.length) {
     return (
-      <div>
-        <p>No addresses found. Please add an address.</p>
-
-        <CreateAddressModal />
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">No addresses found. Add one to continue.</p>
+        <CreateAddressModal buttonText="Add address" modalTitle="New address" />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-4">
       <div>
-        <h3 className="text-xl font-medium mb-2">{heading}</h3>
-        <p className="text-muted-foreground">{description}</p>
+        <h3 className="mb-1 text-lg font-medium">{heading}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       <AddressesModal setAddress={setAddress} />
     </div>
   )
 }
 
-const AddressesModal: React.FC<Props> = ({ setAddress }) => {
+function AddressesModal({
+  setAddress,
+}: {
+  setAddress: React.Dispatch<React.SetStateAction<Partial<Address> | undefined>>
+}) {
   const [open, setOpen] = useState(false)
-  const handleOpenChange = (state: boolean) => {
-    setOpen(state)
-  }
-
-  const closeModal = () => {
-    setOpen(false)
-  }
   const { addresses } = useAddresses()
 
-  if (!addresses || addresses.length === 0) {
-    return <p>No addresses found. Please add an address.</p>
+  if (!addresses?.length) {
+    return <p className="text-sm text-muted-foreground">No addresses found.</p>
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger asChild>
-        <Button variant={'outline'}>{'Select an address'}</Button>
+        <Button type="button" variant="outline">
+          Select an address
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{'Select an address'}</DialogTitle>
+          <DialogTitle>Select an address</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-12">
-          <ul className="flex flex-col gap-8">
+        <div className="flex flex-col gap-8">
+          <ul className="flex flex-col gap-6">
             {addresses.map((address) => (
-              <li key={address.id} className="border-b pb-8 last:border-none">
+              <li className="border-b border-border pb-6 last:border-none" key={address.id}>
                 <AddressItem
                   address={address}
                   beforeActions={
@@ -86,8 +83,9 @@ const AddressesModal: React.FC<Props> = ({ setAddress }) => {
                       onClick={(e) => {
                         e.preventDefault()
                         setAddress(address)
-                        closeModal()
+                        setOpen(false)
                       }}
+                      type="button"
                     >
                       Select
                     </Button>
@@ -97,7 +95,7 @@ const AddressesModal: React.FC<Props> = ({ setAddress }) => {
             ))}
           </ul>
 
-          <CreateAddressModal />
+          <CreateAddressModal buttonText="Add address" modalTitle="New address" />
         </div>
       </DialogContent>
     </Dialog>

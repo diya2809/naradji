@@ -1,9 +1,8 @@
 import { Media } from '@/components/Media'
-import { OrderStatus } from '@/components/OrderStatus'
-import { Price } from '@/components/Price'
-import { Button } from '@/components/ui/button'
-import { Media as MediaType, Order, Product, Variant } from '@/payload-types'
-import { formatDateTime } from '@/utilities/formatDateTime'
+import { ProductPriceDisplay } from '@/components/ProductPriceDisplay'
+import { Product, Variant } from '@/payload-types'
+import { getLineItemPricing, scaleLineItemPricing } from '@/utilities/productPricing'
+import { getProductLineItemImage } from '@/utilities/productLineItemImage'
 import Link from 'next/link'
 
 type Props = {
@@ -11,69 +10,40 @@ type Props = {
   style?: 'compact' | 'default'
   variant?: Variant
   quantity?: number
-  /**
-   * Force all formatting to a particular currency.
-   */
-  currencyCode?: string
 }
 
-export const ProductItem: React.FC<Props> = ({
-  product,
-  style = 'default',
-  quantity,
-  variant,
-  currencyCode,
-}) => {
+export const ProductItem: React.FC<Props> = ({ product, quantity, variant }) => {
   const { title } = product
+  const image = getProductLineItemImage(product, variant)
 
-  const metaImage =
-    product.meta?.image && typeof product.meta?.image !== 'string' ? product.meta.image : undefined
+  const linePricing = scaleLineItemPricing(
+    getLineItemPricing(product, variant),
+    quantity && quantity > 0 ? quantity : 1,
+  )
 
-  const firstGalleryImage =
-    typeof product.gallery?.[0]?.image !== 'string' ? product.gallery?.[0]?.image : undefined
-
-  let image = firstGalleryImage || metaImage
-
-  const isVariant = Boolean(variant) && typeof variant === 'object'
-
-  if (isVariant) {
-    const imageVariant = product.gallery?.find((item) => {
-      if (!item.variantOption) return false
-      const variantOptionID =
-        typeof item.variantOption === 'object' ? item.variantOption.id : item.variantOption
-
-      const hasMatch = variant?.options?.some((option) => {
-        if (typeof option === 'object') return option.id === variantOptionID
-        else return option === variantOptionID
-      })
-
-      return hasMatch
-    })
-
-    if (imageVariant && typeof imageVariant.image !== 'string') {
-      image = imageVariant.image
-    }
-  }
-
-  const itemPrice = variant?.priceInUSD || product.priceInUSD
   const itemURL = `/products/${product.slug}${variant ? `?variant=${variant.id}` : ''}`
 
   return (
     <div className="flex items-center gap-4">
-      <div className="flex items-stretch justify-stretch h-20 w-20 p-2 rounded-lg border">
-        <div className="relative w-full h-full">
-          {image && typeof image !== 'string' && (
-            <Media className="" fill imgClassName="rounded-lg object-cover" resource={image} />
-          )}
+      <div className="flex h-20 w-20 items-center justify-center rounded-lg border border-border bg-card p-2">
+        <div className="relative h-full w-full">
+          {image ? (
+            <Media
+              className="h-full w-full"
+              fill
+              imgClassName="rounded-md object-cover"
+              resource={image}
+            />
+          ) : null}
         </div>
       </div>
-      <div className="flex grow justify-between items-center">
+      <div className="flex grow items-center justify-between">
         <div className="flex flex-col gap-1">
-          <p className="font-medium text-lg">
+          <p className="text-base font-medium">
             <Link href={itemURL}>{title}</Link>
           </p>
           {variant && (
-            <p className="text-sm font-mono text-primary/50 tracking-widest">
+            <p className="text-sm text-muted-foreground">
               {variant.options
                 ?.map((option) => {
                   if (typeof option === 'object') return option.label
@@ -82,22 +52,21 @@ export const ProductItem: React.FC<Props> = ({
                 .join(', ')}
             </p>
           )}
-          <div>
+          <div className="text-sm text-muted-foreground">
             {'x'}
             {quantity}
           </div>
         </div>
 
-        {itemPrice && quantity && (
+        {quantity ? (
           <div className="text-right">
-            <p className="font-medium text-lg">Subtotal</p>
-            <Price
-              className="font-mono text-primary/50 text-sm"
-              amount={itemPrice * quantity}
-              currencyCode={currencyCode}
+            <p className="text-sm font-medium text-muted-foreground">Subtotal</p>
+            <ProductPriceDisplay
+              pricing={linePricing}
+              priceClassName="text-sm font-semibold text-foreground"
             />
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )

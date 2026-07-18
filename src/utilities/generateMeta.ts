@@ -2,35 +2,44 @@ import type { Metadata } from 'next'
 
 import type { Page, Product } from '../payload-types'
 
+import { siteName } from '@/lib/site'
+
+import { getServerSideURL } from './getURL'
 import { mergeOpenGraph } from './mergeOpenGraph'
+import { getTwitterImageUrls, resolveSocialImage } from './resolveSocialImage'
+
+function getDocPath(doc: Page | Product): string {
+  const slug = doc?.slug
+
+  if (!slug || slug === 'home') {
+    return ''
+  }
+
+  return `/${slug}`
+}
 
 export const generateMeta = async (args: { doc: Page | Product }): Promise<Metadata> => {
   const { doc } = args || {}
-
-  const ogImage =
-    typeof doc?.meta?.image === 'object' &&
-    doc.meta.image !== null &&
-    'url' in doc.meta.image &&
-    `${process.env.NEXT_PUBLIC_SERVER_URL}${doc.meta.image.url}`
+  const title = doc?.meta?.title || doc?.title || siteName
+  const description = doc?.meta?.description
+  const metaImage = typeof doc?.meta?.image === 'object' ? doc.meta.image : null
+  const images = resolveSocialImage(metaImage)
+  const pageUrl = `${getServerSideURL()}${getDocPath(doc)}`
 
   return {
-    description: doc?.meta?.description,
+    description,
     openGraph: mergeOpenGraph({
-      ...(doc?.meta?.description
-        ? {
-            description: doc?.meta?.description,
-          }
-        : {}),
-      images: ogImage
-        ? [
-            {
-              url: ogImage,
-            },
-          ]
-        : undefined,
-      title: doc?.meta?.title || doc?.title || 'Payload Ecommerce Template',
-      url: Array.isArray(doc?.slug) ? doc?.slug.join('/') : '/',
+      ...(description ? { description } : {}),
+      images,
+      title,
+      url: pageUrl,
     }),
-    title: doc?.meta?.title || doc?.title || 'Payload Ecommerce Template',
+    title,
+    twitter: {
+      card: 'summary_large_image',
+      description: description ?? undefined,
+      images: getTwitterImageUrls(images),
+      title,
+    },
   }
 }

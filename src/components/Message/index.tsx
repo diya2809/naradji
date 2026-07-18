@@ -1,16 +1,7 @@
-import clsx from 'clsx'
 import React from 'react'
 
-/* [
-          classes.message,
-          className,
-          error && classes.error,
-          success && classes.success,
-          warning && classes.warning,
-          !error && !success && !warning && classes.default,
-        ]
-          .filter(Boolean)
-          .join(' '), */
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { cn } from '@/utilities/cn'
 
 export const Message: React.FC<{
   className?: string
@@ -21,22 +12,13 @@ export const Message: React.FC<{
 }> = ({ className, error, message, success, warning }) => {
   const messageToRender = message || error || success || warning
 
-  if (messageToRender) {
-    return (
-      <div
-        className={clsx(
-          'p-4 my-8 rounded-lg',
-          {
-            'bg-success ': Boolean(success),
-            ' bg-warning': Boolean(warning),
-            'bg-error': Boolean(error),
-          },
-          className,
-        )}
-      >
-        {messageToRender}
-      </div>
-    )
+  if (!messageToRender) {
+    return null
   }
-  return null
+
+  return (
+    <Alert className={cn('my-8', className)} variant={error ? 'destructive' : 'default'}>
+      <AlertDescription>{messageToRender}</AlertDescription>
+    </Alert>
+  )
 }

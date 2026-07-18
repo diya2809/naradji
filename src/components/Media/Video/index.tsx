@@ -22,7 +22,33 @@ export const Video: React.FC<MediaProps> = (props) => {
   }, [])
 
   if (resource && typeof resource === 'object') {
-    const { filename } = resource
+    const { filename, updatedAt, url } = resource
+
+    if (process.env.NODE_ENV === 'development') {
+      const base =
+        url || (filename ? `${process.env.NEXT_PUBLIC_SERVER_URL || ''}/media/${filename}` : '')
+      const src =
+        base && updatedAt && base.startsWith('/api/media/file/')
+          ? `${base}${base.includes('?') ? '&' : '?'}v=${new Date(updatedAt).getTime()}`
+          : base
+
+      if (!src) return null
+
+      return (
+        <video
+          autoPlay
+          className={cn(videoClassName)}
+          controls={false}
+          loop
+          muted
+          onClick={onClick}
+          playsInline
+          ref={videoRef}
+        >
+          <source src={src} />
+        </video>
+      )
+    }
 
     return (
       <video

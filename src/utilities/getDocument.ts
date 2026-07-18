@@ -1,4 +1,4 @@
-import type { Config } from 'src/payload-types'
+import type { Config } from '@/payload-types'
 
 import configPromise from '@payload-config'
 import { getPayload } from 'payload'
@@ -22,10 +22,22 @@ async function getDocument(collection: Collection, slug: string, depth = 0) {
   return page.docs[0]
 }
 
+const documentCache = new Map<string, () => Promise<Config['collections'][Collection]>>()
+
 /**
- * Returns a unstable_cache function mapped with the cache tag for the slug
+ * Returns a stable unstable_cache function mapped with the cache tag for the slug.
  */
-export const getCachedDocument = (collection: Collection, slug: string) =>
-  unstable_cache(async () => getDocument(collection, slug), [collection, slug], {
-    tags: [`${collection}_${slug}`],
-  })
+export const getCachedDocument = (collection: Collection, slug: string, depth = 0) => {
+  const key = `${collection}:${slug}:${depth}`
+
+  if (!documentCache.has(key)) {
+    documentCache.set(
+      key,
+      unstable_cache(async () => getDocument(collection, slug, depth), [key], {
+        tags: [`${collection}_${slug}`],
+      }),
+    )
+  }
+
+  return documentCache.get(key)!
+}

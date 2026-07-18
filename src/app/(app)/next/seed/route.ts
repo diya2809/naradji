@@ -1,45 +1,54 @@
 import { getPayload } from 'payload'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { seed } from '@/endpoints/seed'
 import config from '@payload-config'
 import { headers } from 'next/headers'
+import type { PayloadRequest } from 'payload'
 
 import { checkRole } from '@/access/utilities'
 
 export const maxDuration = 300 // This function can run for a maximum of 300 seconds
 
+const seededPageSlugs = ['home', 'contact', 'about', 'privacy', 'terms', 'cookies'] as const
+
+function revalidateSeededPages() {
+  for (const slug of seededPageSlugs) {
+    revalidateTag(`pages_${slug}`, 'max')
+    revalidatePath(slug === 'home' ? '/' : `/${slug}`)
+  }
+
+  revalidateTag('global_header', 'max')
+  revalidateTag('global_footer', 'max')
+  revalidatePath('/shop')
+  revalidatePath('/', 'layout')
+}
+
 export async function POST(): Promise<Response> {
   const payload = await getPayload({ config })
   const requestHeaders = await headers()
 
-  // Authenticate by passing request headers
   const { user } = await payload.auth({ headers: requestHeaders })
 
   if (!user || !checkRole(['admin'], user)) {
-    return Response.json(
-      {
-        success: false,
-        error:
-          'Admin login required. Create the first user at /admin/create-first-user, then click Seed again.',
-      },
-      { status: 403 },
-    )
+    return new Response('Action forbidden.', { status: 403 })
   }
 
   try {
-    // Do NOT wrap seed in createLocalReq — Atlas transactions break
-    // products.gallery.variantOption filterOptions mid-seed.
+    // Do NOT use createLocalReq on Atlas — multi-doc transactions break
+    // relationship filterOptions during seed. Pass a lightweight req instead.
     await seed({
       payload,
-      // Minimal req shape for typings; seed deliberately ignores transaction scope
-      req: { payload, user, context: { disableRevalidate: true } } as Parameters<
-        typeof seed
-      >[0]['req'],
+      req: {
+        payload,
+        user,
+        context: { disableRevalidate: true },
+      } as unknown as PayloadRequest,
     })
+    revalidateSeededPages()
 
     return Response.json({ success: true })
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Error seeding data'
     payload.logger.error({ err: e, message: 'Error seeding data' })
-    return Response.json({ success: false, error: message }, { status: 500 })
+    return new Response('Error seeding data.', { status: 500 })
   }
 }

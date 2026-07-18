@@ -6,9 +6,11 @@ import {
   lexicalEditor,
 } from '@payloadcms/richtext-lexical'
 
+import { blockTabs } from '@/fields/blockTabs'
+
 export const Banner: Block = {
   slug: 'banner',
-  fields: [
+  fields: blockTabs([
     {
       name: 'style',
       type: 'select',
@@ -18,6 +20,7 @@ export const Banner: Block = {
         { label: 'Warning', value: 'warning' },
         { label: 'Error', value: 'error' },
         { label: 'Success', value: 'success' },
+        { label: 'Emphasis', value: 'emphasis' },
       ],
       required: true,
     },
@@ -32,6 +35,6 @@ export const Banner: Block = {
       label: false,
       required: true,
     },
-  ],
+  ]),
   interfaceName: 'BannerBlock',
 }

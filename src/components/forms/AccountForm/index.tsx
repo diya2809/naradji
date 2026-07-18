@@ -2,38 +2,34 @@
 
 import { FormError } from '@/components/forms/FormError'
 import { FormItem } from '@/components/forms/FormItem'
-import { Message } from '@/components/Message'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { User } from '@/payload-types'
 import { useAuth } from '@/providers/Auth'
 import { useRouter } from 'next/navigation'
-import React, { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { IconPencil } from '@tabler/icons-react'
+import { Skeleton } from '@/components/ui/skeleton'
 
 type FormData = {
   email: string
   name: User['name']
-  password: string
-  passwordConfirm: string
 }
 
 export const AccountForm: React.FC = () => {
   const { setUser, user } = useAuth()
-  const [changePassword, setChangePassword] = useState(false)
+  const isMobile = useIsMobile()
 
   const {
     formState: { errors, isLoading, isSubmitting, isDirty },
     handleSubmit,
     register,
     reset,
-    watch,
   } = useForm<FormData>()
-
-  const password = useRef({})
-  password.current = watch('password', '')
 
   const router = useRouter()
 
@@ -41,7 +37,6 @@ export const AccountForm: React.FC = () => {
     async (data: FormData) => {
       if (user) {
         const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/api/users/${user.id}`, {
-          // Make sure to include cookies with fetch
           body: JSON.stringify(data),
           credentials: 'include',
           headers: {
@@ -54,12 +49,9 @@ export const AccountForm: React.FC = () => {
           const json = await response.json()
           setUser(json.doc)
           toast.success('Successfully updated account.')
-          setChangePassword(false)
           reset({
             name: json.doc.name,
             email: json.doc.email,
-            password: '',
-            passwordConfirm: '',
           })
         } else {
           toast.error('There was a problem updating your account.')
@@ -78,116 +70,56 @@ export const AccountForm: React.FC = () => {
       )
     }
 
-    // Once user is loaded, reset form to have default values
     if (user) {
       reset({
         name: user.name,
         email: user.email,
-        password: '',
-        passwordConfirm: '',
       })
     }
-  }, [user, router, reset, changePassword])
+  }, [user, router, reset])
+
+  if (user === undefined) {
+    return <Skeleton aria-busy="true" className="max-w-xl h-40 rounded-lg" />
+  }
 
   return (
     <form className="max-w-xl" onSubmit={handleSubmit(onSubmit)}>
-      {!changePassword ? (
-        <Fragment>
-          <div className="prose dark:prose-invert mb-8">
-            <p className="">
-              {'Change your account details below, or '}
-              <Button
-                className="px-0 text-inherit underline hover:cursor-pointer"
-                onClick={() => setChangePassword(!changePassword)}
-                type="button"
-                variant="link"
-              >
-                click here
-              </Button>
-              {' to change your password.'}
-            </p>
-          </div>
+      <div className="flex flex-col gap-3 mb-4">
+        <FormItem>
+          <Input
+            id="email"
+            {...register('email', { required: 'Please provide an email.' })}
+            type="email"
+            readOnly
+            className="border-none bg-transparent shadow-none p-0 focus-visible:ring-0 select-text text-muted-foreground h-auto cursor-default"
+          />
+          {errors.email && <FormError message={errors.email.message} />}
+        </FormItem>
 
-          <div className="flex flex-col gap-8 mb-8">
-            <FormItem>
-              <Label htmlFor="email" className="mb-2">
-                Email Address
-              </Label>
-              <Input
-                id="email"
-                {...register('email', { required: 'Please provide an email.' })}
-                type="email"
-              />
-              {errors.email && <FormError message={errors.email.message} />}
-            </FormItem>
-
-            <FormItem>
-              <Label htmlFor="name" className="mb-2">
-                Name
-              </Label>
-              <Input
-                id="name"
-                {...register('name', { required: 'Please provide a name.' })}
-                type="text"
-              />
-              {errors.name && <FormError message={errors.name.message} />}
-            </FormItem>
+        <FormItem>
+          <div className="flex items-center justify-between gap-2 max-w-sm pb-1 transition-all">
+            <Input
+              id="name"
+              {...register('name', { required: 'Please provide a name.' })}
+              type="text"
+              placeholder="Name"
+              className="border-none bg-transparent shadow-none p-0 focus-visible:ring-0 select-text h-auto font-medium text-foreground text-lg w-full"
+            />
+            <IconPencil className="h-4.5 w-4.5 text-muted-foreground/60 shrink-0" />
           </div>
-        </Fragment>
-      ) : (
-        <Fragment>
-          <div className="prose dark:prose-invert mb-8">
-            <p>
-              {'Change your password below, or '}
-              <Button
-                className="px-0 text-inherit underline hover:cursor-pointer"
-                onClick={() => setChangePassword(!changePassword)}
-                type="button"
-                variant="link"
-              >
-                cancel
-              </Button>
-              .
-            </p>
-          </div>
+          {errors.name && <FormError message={errors.name.message} />}
+        </FormItem>
+      </div>
 
-          <div className="flex flex-col gap-8 mb-8">
-            <FormItem>
-              <Label htmlFor="password" className="mb-2">
-                New password
-              </Label>
-              <Input
-                id="password"
-                {...register('password', { required: 'Please provide a new password.' })}
-                type="password"
-              />
-              {errors.password && <FormError message={errors.password.message} />}
-            </FormItem>
-
-            <FormItem>
-              <Label htmlFor="passwordConfirm" className="mb-2">
-                Confirm password
-              </Label>
-              <Input
-                id="passwordConfirm"
-                {...register('passwordConfirm', {
-                  required: 'Please confirm your new password.',
-                  validate: (value) => value === password.current || 'The passwords do not match',
-                })}
-                type="password"
-              />
-              {errors.passwordConfirm && <FormError message={errors.passwordConfirm.message} />}
-            </FormItem>
-          </div>
-        </Fragment>
+      {isDirty && (
+        <Button
+          disabled={isLoading || isSubmitting}
+          type="submit"
+          className="bg-transparent hover:bg-transparent text-primary hover:text-primary/80 font-semibold p-0 h-auto border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50 cursor-pointer"
+        >
+          {isLoading || isSubmitting ? 'Processing...' : 'save changes'}
+        </Button>
       )}
-      <Button disabled={isLoading || isSubmitting || !isDirty} type="submit" variant="default">
-        {isLoading || isSubmitting
-          ? 'Processing'
-          : changePassword
-            ? 'Change Password'
-            : 'Update Account'}
-      </Button>
     </form>
   )
 }

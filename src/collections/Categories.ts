@@ -2,6 +2,10 @@ import { slugField } from 'payload'
 import type { CollectionConfig } from 'payload'
 
 import { adminOnly } from '@/access/adminOnly'
+import {
+  revalidateCategories,
+  revalidateCategoriesDelete,
+} from '@/collections/hooks/revalidateCategories'
 
 export const Categories: CollectionConfig = {
   slug: 'categories',
@@ -14,6 +18,10 @@ export const Categories: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     group: 'Content',
+  },
+  hooks: {
+    afterChange: [revalidateCategories],
+    afterDelete: [revalidateCategoriesDelete],
   },
   fields: [
     {

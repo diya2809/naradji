@@ -1,74 +1,19 @@
 import { RequiredDataFromCollectionSlug } from 'payload'
 
+import { richText } from './richtext'
+
 export const contactFormData: () => RequiredDataFromCollectionSlug<'forms'> = () => {
   return {
-    confirmationMessage: {
-      root: {
-        type: 'root',
-        children: [
-          {
-            type: 'heading',
-            children: [
-              {
-                type: 'text',
-                detail: 0,
-                format: 0,
-                mode: 'normal',
-                style: '',
-                text: 'The contact form has been submitted successfully.',
-                version: 1,
-              },
-            ],
-            direction: 'ltr',
-            format: '',
-            indent: 0,
-            tag: 'h2',
-            version: 1,
-          },
-        ],
-        direction: 'ltr',
-        format: '',
-        indent: 0,
-        version: 1,
-      },
-    },
+    confirmationMessage: richText('Thank you — the Naradji team has received your message and will reply shortly.'),
     confirmationType: 'message',
-    createdAt: '2023-01-12T21:47:41.374Z',
     emails: [
       {
-        emailFrom: '"Payload" \u003Cdemo@payloadcms.com\u003E',
+        emailFrom: '"Naradji" <hello@naradji.app>',
         emailTo: '{{email}}',
-        message: {
-          root: {
-            type: 'root',
-            children: [
-              {
-                type: 'paragraph',
-                children: [
-                  {
-                    type: 'text',
-                    detail: 0,
-                    format: 0,
-                    mode: 'normal',
-                    style: '',
-                    text: 'Your contact form submission was successfully received.',
-                    version: 1,
-                  },
-                ],
-                direction: 'ltr',
-                format: '',
-                indent: 0,
-                textFormat: 0,
-                version: 1,
-              },
-            ],
-            direction: 'ltr',
-            format: '',
-            indent: 0,
-            version: 1,
-          },
-        },
-        subject: "You've received a new message.",
+        message: richText(
+          'We received your message and will respond within 1–2 business days with next steps.',
+        ),
+        subject: 'We received your message — Naradji',
       },
     ],
     fields: [
@@ -100,14 +45,12 @@ export const contactFormData: () => RequiredDataFromCollectionSlug<'forms'> = ()
         name: 'message',
         blockName: 'message',
         blockType: 'textarea',
-        label: 'Message',
+        label: 'How can we help?',
         required: true,
         width: 100,
       },
     ],
-    redirect: undefined,
-    submitButtonLabel: 'Submit',
-    title: 'Contact Form',
-    updatedAt: '2023-01-12T21:47:41.374Z',
+    submitButtonLabel: 'Send Message',
+    title: 'Contact Naradji',
   }
 }

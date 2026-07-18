@@ -5,13 +5,13 @@ import { tmpdir } from 'os'
 import path from 'path'
 import { createReadStream } from 'fs'
 import { randomUUID } from 'crypto'
+import { DEMO_BREATH_TRANSCRIPT } from '@/lib/naradji/demoBreath'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 /** Deterministic demo grocery breath — inject via ?demo=1 or form field demo=1 */
-export const DEMO_TRANSCRIPT =
-  'do kilo atta, ek dozen anda, paanch Maggi, do Parle-G, COD'
+export const DEMO_TRANSCRIPT = DEMO_BREATH_TRANSCRIPT
 
 export async function POST(req: Request) {
   const url = new URL(req.url)
