@@ -92,7 +92,7 @@ export function ShopCatalog({ categories, products }: Props) {
       )}
 
       {filteredProducts.length > 0 ? (
-        <Grid className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <Grid className="grid grid-cols-2 gap-x-3 gap-y-5 sm:gap-x-4 sm:gap-y-6 lg:grid-cols-3">
           {filteredProducts.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

@@ -100,10 +100,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       }}
       className={cn('group block h-full w-full cursor-pointer outline-none text-left', className)}
     >
-      <div className="flex h-full flex-col gap-1">
+      <div className="flex h-full flex-col">
         {image ? (
-          // No bg-muted or rounded-lg — image blends directly with page background
-          <div className="relative aspect-square w-full overflow-hidden">
+          <div className="relative aspect-[3/4] w-full overflow-hidden bg-muted/30 sm:aspect-square">
             <div className="relative size-full">
               <MediaComponent
                 className="relative size-full"
@@ -126,17 +125,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
         ) : null}
 
-        <div className="space-y-1 pt-2">
-          <p className="line-clamp-2 text-base font-medium text-foreground">{title}</p>
+        <div className="flex flex-1 flex-col gap-1 pt-2">
+          <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">{title}</p>
           {descriptionPreview ? (
-            <p className="line-clamp-1 text-xs leading-snug text-muted-foreground">
+            <p className="line-clamp-1 hidden text-xs leading-snug text-muted-foreground sm:block">
               {descriptionPreview}
             </p>
           ) : null}
-        </div>
-
-        <div className="pt-1">
-          <ProductPriceDisplay pricing={pricing} />
+          <div className="mt-auto pt-0.5">
+            <ProductPriceDisplay
+              pricing={pricing}
+              priceClassName="text-base font-bold text-foreground"
+            />
+          </div>
         </div>
       </div>
     </div>

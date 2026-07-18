@@ -21,12 +21,12 @@ export const Header: GlobalConfig = {
         {
           name: 'enabled',
           type: 'checkbox',
-          defaultValue: true,
+          defaultValue: false,
         },
         {
           name: 'text',
           type: 'text',
-          defaultValue: 'Boliye atta, doodh, chai — COD with haan pakka · Free shipping over ₹1,999',
+          defaultValue: '',
           admin: {
             condition: (_, siblingData) => Boolean(siblingData?.enabled),
           },

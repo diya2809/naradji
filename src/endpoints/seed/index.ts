@@ -473,8 +473,8 @@ export const seed = async ({
 
   const headerData: Partial<Header> = {
     announcement: {
-      enabled: true,
-      text: 'Boliye atta, doodh, chai — COD with haan pakka · Free shipping over ₹1,999',
+      enabled: false,
+      text: '',
       link: '/shop',
     },
     navItems: [

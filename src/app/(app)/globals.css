@@ -16,7 +16,7 @@
   /* Keep in sync: Header nav/announcement use these via siteLayoutVars */
   --site-header-nav-height: 4rem;
   --site-header-announcement-height: 2.5rem;
-  --site-header-announcement-display-height: var(--site-header-announcement-height);
+  --site-header-announcement-display-height: 0px;
   --site-header-offset: calc(
     var(--site-header-nav-height) + var(--site-header-announcement-display-height, 0px)
   );

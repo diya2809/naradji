@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { DEMO_BREATH_TRANSCRIPT } from '@/lib/naradji/demoBreath'
 import { useNaradjiStore, type MicState } from '@/lib/naradji/store'
 
@@ -35,6 +36,7 @@ export function MicPill({
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const recording = useRef(false)
   const [supported, setSupported] = useState(true)
+  const listening = micState === 'listening'
 
   useEffect(() => {
     setSupported(typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia)
@@ -97,6 +99,7 @@ export function MicPill({
 
   function onPointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
     e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
     if (micState === 'greeting' || micState === 'transcribing' || micState === 'adding') return
 
     if (!sessionOpen) {
@@ -113,6 +116,9 @@ export function MicPill({
 
   function onPointerUp(e: ReactPointerEvent<HTMLButtonElement>) {
     e.preventDefault()
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
     if (holdTimer.current) {
       clearTimeout(holdTimer.current)
       holdTimer.current = null
@@ -140,14 +146,17 @@ export function MicPill({
       ) : null}
       <button
         type="button"
-        className={[
-          'pointer-events-auto flex h-14 min-w-[12rem] items-center justify-center gap-2 rounded-full px-6 text-sm font-medium shadow-xl transition',
-          micState === 'listening'
-            ? 'bg-red-600 text-white ring-4 ring-red-300/50'
-            : 'bg-stone-900 text-stone-50 hover:bg-stone-800',
-        ].join(' ')}
+        aria-label={listening ? 'Release to stop listening' : LABEL[micState]}
+        className="pointer-events-auto flex h-auto min-w-0 items-center justify-center bg-transparent p-0 shadow-none"
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
+        onPointerCancel={() => {
+          if (holdTimer.current) {
+            clearTimeout(holdTimer.current)
+            holdTimer.current = null
+          }
+          if (micState === 'listening') stopRecording()
+        }}
         onPointerLeave={() => {
           if (holdTimer.current) {
             clearTimeout(holdTimer.current)
@@ -156,13 +165,28 @@ export function MicPill({
           if (micState === 'listening') stopRecording()
         }}
       >
-        <span
-          className={[
-            'inline-block h-2.5 w-2.5 rounded-full',
-            micState === 'listening' ? 'animate-pulse bg-white' : 'bg-amber-400',
-          ].join(' ')}
-        />
-        {LABEL[micState]}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={listening ? 'narad-listening' : 'narad-idle'}
+            className="relative block"
+            initial={{ opacity: 0, scale: 0.85, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 8 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+          >
+            <motion.img
+              src={listening ? '/naradji/narad-listening.png' : '/naradji/narad-idle.png'}
+              alt={listening ? 'Naradji listening' : 'Hold to speak with Naradji'}
+              draggable={false}
+              className={[
+                'w-auto select-none drop-shadow-2xl',
+                listening ? 'h-24 sm:h-28' : 'h-36 sm:h-44',
+              ].join(' ')}
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          </motion.span>
+        </AnimatePresence>
       </button>
       <p className="pointer-events-none text-xs text-stone-500">{hint}</p>
     </div>

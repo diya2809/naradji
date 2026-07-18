@@ -30,7 +30,7 @@ export const ProductPriceDisplay: React.FC<Props> = ({
           lowestAmount={pricing.lowestPrice}
         />
         {pricing.maxDiscountPercent ? (
-          <span className="text-xs font-semibold text-primary">
+          <span className="text-xs font-semibold text-emerald-700">
             upto {pricing.maxDiscountPercent}% off
           </span>
         ) : null}
@@ -51,7 +51,7 @@ export const ProductPriceDisplay: React.FC<Props> = ({
         />
       ) : null}
       {discountPercent ? (
-        <span className="text-xs font-semibold text-primary">{discountPercent}% OFF</span>
+        <span className="text-xs font-semibold text-emerald-700">{discountPercent}% off</span>
       ) : null}
     </div>
   )

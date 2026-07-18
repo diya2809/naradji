@@ -13,10 +13,8 @@ import { Logo } from '@/components/Logo/Logo'
 import { siteLayoutVars } from '@/utilities/siteLayout'
 
 import { MobileMenu } from './MobileMenu'
-import { useHeaderAnnouncementScroll } from './useHeaderAnnouncementScroll'
 import type { CategoryListItem } from '@/types/storefront'
 import type { Header } from '@/payload-types'
-
 
 type Props = {
   categories: CategoryListItem[]
@@ -28,38 +26,9 @@ export function HeaderClient({ categories, header }: Props) {
   const menu = header.navItems || []
   const { user: authUser } = useAuth()
   const isLoggedIn = Boolean(authUser?.id)
-  const announcement = (header as Header & {
-    announcement?: { enabled?: boolean; link?: string | null; text?: string | null }
-  }).announcement
-  const announcementText = announcement?.text?.trim() ?? ''
-  const announcementLink = announcement?.link?.trim() ?? ''
-  const showAnnouncement = announcement?.enabled !== false && Boolean(announcementText)
-
-  useHeaderAnnouncementScroll(showAnnouncement)
 
   return (
     <div className="fixed inset-x-0 top-0 z-40 bg-background">
-      {showAnnouncement ? (
-        <div
-          className="overflow-hidden transition-[height] duration-300 ease-out"
-          id="site-announcement-bar"
-          style={{ height: siteLayoutVars.announcementDisplayHeight }}
-        >
-          <div
-            className="flex items-center justify-center bg-primary/15 px-4 text-center text-sm font-semibold text-primary"
-            style={{ height: siteLayoutVars.headerAnnouncementHeight }}
-          >
-            {announcementLink ? (
-              <Link className="hover:underline" href={announcementLink}>
-                {announcementText}
-              </Link>
-            ) : (
-              <p>{announcementText}</p>
-            )}
-          </div>
-        </div>
-      ) : null}
-
       <div className="bg-background">
         <nav
           className="container relative flex items-center justify-between md:justify-start"
