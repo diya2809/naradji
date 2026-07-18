@@ -207,6 +207,28 @@ export const ProductsCollection: CollectionOverride = ({ defaultCollection }) =>
       hasMany: true,
       relationTo: 'categories',
     },
+    {
+      name: 'unit',
+      type: 'text',
+      admin: {
+        position: 'sidebar',
+        description: 'Display unit (kg, dozen, pack…)',
+      },
+    },
+    {
+      name: 'aliases',
+      type: 'array',
+      admin: {
+        description: 'Voice aliases (Hinglish / Gujarati / Hindi) for STT matching',
+      },
+      fields: [
+        {
+          name: 'alias',
+          type: 'text',
+          required: true,
+        },
+      ],
+    },
     slugField(),
   ],
 })

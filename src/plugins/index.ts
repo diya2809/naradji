@@ -116,13 +116,17 @@ export const plugins: Plugin[] = [
       }),
     },
     payments: {
-      paymentMethods: [
-        stripeAdapter({
-          secretKey: process.env.STRIPE_SECRET_KEY!,
-          publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
-          webhookSecret: process.env.STRIPE_WEBHOOKS_SIGNING_SECRET!,
-        }),
-      ],
+      // COD-only demo: keep Stripe adapter wired but inert (empty keys).
+      // UI routes under /checkout redirect home. Packages left installed.
+      paymentMethods: process.env.STRIPE_SECRET_KEY
+        ? [
+            stripeAdapter({
+              secretKey: process.env.STRIPE_SECRET_KEY,
+              publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '',
+              webhookSecret: process.env.STRIPE_WEBHOOKS_SIGNING_SECRET || '',
+            }),
+          ]
+        : [],
     },
     products: {
       productsCollectionOverride: ProductsCollection,

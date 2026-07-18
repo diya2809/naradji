@@ -17,12 +17,16 @@
     "reinstall": "cross-env NODE_OPTIONS=--no-deprecation rm -rf node_modules && rm pnpm-lock.yaml && pnpm --ignore-workspace install",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "stripe-webhooks": "stripe listen --forward-to localhost:3000/api/payments/stripe/webhooks",
-    "test": "pnpm run test:int && pnpm run test:e2e",
+    "test": "pnpm run test:unit",
+    "test:unit": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts tests/unit",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts",
-    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts"
+    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts tests/int",
+    "seed:naradji": "cross-env NODE_OPTIONS=--no-deprecation tsx scripts/seed-naradji.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.16",
     "@payloadcms/admin-bar": "3.86.0",
+    "@payloadcms/db-mongodb": "3.86.0",
     "@payloadcms/email-nodemailer": "3.86.0",
     "@payloadcms/live-preview-react": "3.86.0",
     "@payloadcms/next": "3.86.0",
@@ -40,6 +44,7 @@
     "@radix-ui/react-slot": "^1.1.2",
     "@stripe/react-stripe-js": "^3",
     "@stripe/stripe-js": "^4.0.0",
+    "ai": "^7.0.31",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "cross-env": "^7.0.3",
@@ -47,6 +52,7 @@
     "dotenv": "^8.2.0",
     "embla-carousel-auto-scroll": "^8.1.5",
     "embla-carousel-react": "^8.5.2",
+    "framer-motion": "^12.42.2",
     "geist": "^1.3.0",
     "graphql": "^16.8.2",
     "jsonwebtoken": "9.0.1",
@@ -59,11 +65,13 @@
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-hook-form": "7.71.1",
+    "sarvamai": "^1.1.7",
     "sharp": "0.34.2",
     "sonner": "^1.7.2",
     "stripe": "18.5.0",
     "tailwind-merge": "^3.4.0",
-    "@payloadcms/db-mongodb": "3.86.0"
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -101,6 +109,7 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "sharp"
-    ]
+    ],
+    "minimumReleaseAge": 0
   }
 }

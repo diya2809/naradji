@@ -34,11 +34,15 @@ export const Providers: React.FC<{
                 },
               },
             }}
-            paymentMethods={[
-              stripeAdapterClient({
-                publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '',
-              }),
-            ]}
+            paymentMethods={
+              process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+                ? [
+                    stripeAdapterClient({
+                      publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+                    }),
+                  ]
+                : []
+            }
           >
             {children}
           </EcommerceProvider>
