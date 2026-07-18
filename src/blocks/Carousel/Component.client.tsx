@@ -28,7 +28,7 @@ export const CarouselClient: React.FC<{ products: ListingProduct[] }> = ({ produ
       <CarouselContent className="-ml-3">
         {carouselProducts.map((product, i) => (
           <CarouselItem
-            className="basis-full pl-3 sm:basis-56"
+            className="basis-[45%] pl-3 sm:basis-56"
             key={`${product.slug}-${i}`}
           >
             <ProductCard product={product} />

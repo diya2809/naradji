@@ -72,7 +72,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
             <main className="relative flex min-h-screen flex-col">
               <Header />
-              <div aria-hidden className="site-header-spacer shrink-0" />
               <div className="flex flex-1 flex-col">{children}</div>
               <Footer />
               <div aria-hidden className="site-bottom-nav-spacer shrink-0 md:hidden" />

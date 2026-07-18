@@ -10,7 +10,7 @@ import React, { Suspense } from 'react'
 
 export function HeaderClient() {
   return (
-    <div className="fixed inset-x-0 top-0 z-40 bg-background">
+    <header className="sticky top-0 z-40 shrink-0 bg-background">
       <div className="bg-background">
         <nav
           className="container relative flex items-center gap-2"
@@ -35,6 +35,6 @@ export function HeaderClient() {
           </Suspense>
         </nav>
       </div>
-    </div>
+    </header>
   )
 }

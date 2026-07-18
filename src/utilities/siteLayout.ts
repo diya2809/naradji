@@ -7,7 +7,7 @@ export const HEADER_SCROLL_THRESHOLD = 30
 export const HEADER_SCROLL_EXPAND_THRESHOLD = 5
 
 export const siteLayoutVars = {
-  /** Fixed header stack — nav + animated announcement slot. */
+  /** Sticky header height tokens — nav + optional announcement slot. */
   headerOffset: 'var(--site-header-offset)',
   headerNavHeight: 'var(--site-header-nav-height)',
   headerAnnouncementHeight: 'var(--site-header-announcement-height)',
